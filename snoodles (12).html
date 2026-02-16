@@ -1,0 +1,1841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snoodles — Protect the Village!</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Gaegu:wght@700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; background: #6a9ec4; font-family: 'Fredoka', sans-serif; }
+  #renderCanvas { width: 100vw; height: 100vh; display: block; outline: none; touch-action: none; cursor: none; }
+
+  /* ─── HUD ─── */
+  #hud-top {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10; pointer-events: none;
+    padding: 10px 14px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+  }
+  .hp { background: rgba(255,248,230,0.92); border: 2px solid #5c3d1a; border-radius: 12px; padding: 6px 12px;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.3); text-align: center; }
+  .hp .lab { font-family: 'Gaegu', cursive; font-size: 11px; color: #8b6914; text-transform: uppercase; letter-spacing: 0.5px; }
+  .hp .val { font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 20px; color: #3d2200; line-height: 1.1; }
+  .food-bar { width: 100%; height: 8px; background: #e0d0b0; border-radius: 4px; overflow: hidden; margin-top: 3px; border: 1px solid #5c3d1a; }
+  .food-bar-fill { height: 100%; background: linear-gradient(90deg, #4caf50, #8bc34a); border-radius: 3px; transition: width 0.4s; }
+
+  #hud-bottom {
+    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 10; pointer-events: none;
+    display: flex; gap: 6px; align-items: flex-end;
+  }
+  .weapon-slot {
+    background: rgba(35,45,25,0.85); border: 2px solid #555; border-radius: 10px; padding: 6px 10px;
+    text-align: center; min-width: 64px; transition: all 0.15s; opacity: 0.5;
+  }
+  .weapon-slot.active { border-color: #ffde59; opacity: 1; box-shadow: 0 0 12px rgba(255,220,80,0.4); }
+  .weapon-slot.locked { opacity: 0.25; }
+  .weapon-slot .wicon { font-size: 22px; }
+  .weapon-slot .wname { font-size: 10px; color: #ccc; white-space: nowrap; }
+  .weapon-slot .wkey { font-size: 9px; color: #999; background: rgba(255,255,255,0.1); border-radius: 3px; padding: 0 4px; display: inline-block; margin-top: 2px; }
+
+  /* ─── CROSSHAIR ─── */
+  #crosshair { position: fixed; pointer-events: none; z-index: 15; width: 32px; height: 32px; transform: translate(-50%,-50%); display: none; }
+  #crosshair .ch-ring { position: absolute; inset: 4px; border: 2px solid rgba(255,200,100,0.9); border-radius: 50%; box-shadow: 0 0 6px rgba(200,150,50,0.5); }
+  #crosshair .ch-dot { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 4px; height: 4px; background: #ffc864; border-radius: 50%; }
+  #crosshair .ch-line { position: absolute; background: rgba(255,200,100,0.7); }
+  #crosshair .ch-line.top { width: 2px; height: 6px; top: 0; left: 50%; transform: translateX(-50%); }
+  #crosshair .ch-line.bottom { width: 2px; height: 6px; bottom: 0; left: 50%; transform: translateX(-50%); }
+  #crosshair .ch-line.left { width: 6px; height: 2px; left: 0; top: 50%; transform: translateY(-50%); }
+  #crosshair .ch-line.right { width: 6px; height: 2px; right: 0; top: 50%; transform: translateY(-50%); }
+
+  /* ─── TITLE SCREEN ─── */
+  #title-screen {
+    position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, #5a8ab4 0%, #6aaa72 50%, #4a7a3a 100%); transition: opacity 0.8s; cursor: auto;
+  }
+  #title-screen.hidden { opacity: 0; pointer-events: none; }
+  .title-text { font-family: 'Gaegu', cursive; font-size: 80px; font-weight: 700; color: #ffde59;
+    text-shadow: 0 4px 0 #c4940a, 0 8px 30px rgba(255,200,0,0.3); animation: titleBounce 2s ease-in-out infinite; }
+  .subtitle { font-family: 'Fredoka'; font-size: 17px; color: #a8d8a0; margin-top: 6px; letter-spacing: 2px; }
+  .start-btn { margin-top: 30px; font-family: 'Fredoka'; font-weight: 700; font-size: 22px; color: #fff;
+    background: linear-gradient(180deg, #e85d26, #c73e10); border: 3px solid #8b2a0a; border-radius: 50px;
+    padding: 12px 40px; cursor: pointer; pointer-events: all; box-shadow: 0 6px 0 #7a2208, 0 8px 30px rgba(200,60,10,0.4);
+    transition: transform 0.1s, box-shadow 0.1s; }
+  .start-btn:hover { transform: translateY(-2px); }
+  .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #7a2208; }
+  .how-box { margin-top: 24px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 14px; padding: 16px 24px; max-width: 480px; text-align: left; }
+  .how-box h3 { font-family: 'Gaegu', cursive; font-size: 20px; color: #ffde59; margin-bottom: 10px; }
+  .how-box .row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 7px; font-size: 14px;
+    color: rgba(200,230,195,0.9); line-height: 1.3; }
+  .how-box .row .ic { font-size: 18px; flex-shrink: 0; }
+  .how-box kbd { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.25); border-radius: 4px;
+    padding: 0 5px; font-family: 'Fredoka'; color: #e8e0d0; font-size: 12px; }
+  @keyframes titleBounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
+  /* ─── PAUSE / SHOP ─── */
+  #pause-screen {
+    position: fixed; inset: 0; z-index: 90; display: none; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(30,45,25,0.92); backdrop-filter: blur(6px); cursor: auto;
+  }
+  #pause-screen.show { display: flex; }
+  .pause-title { font-family: 'Gaegu', cursive; font-size: 52px; color: #ffde59; text-shadow: 0 3px 0 #8b6a00; }
+  .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; max-width: 520px; width: 100%; padding: 0 20px; }
+  .shop-item {
+    background: rgba(255,248,230,0.08); border: 2px solid rgba(255,220,100,0.2); border-radius: 12px;
+    padding: 12px; text-align: center; cursor: pointer; transition: all 0.15s; pointer-events: all;
+  }
+  .shop-item:hover:not(.bought):not(.too-expensive) { border-color: #ffde59; background: rgba(255,248,230,0.15); }
+  .shop-item.bought { opacity: 0.4; cursor: default; }
+  .shop-item.too-expensive { opacity: 0.5; cursor: not-allowed; }
+  .shop-item .si-icon { font-size: 28px; }
+  .shop-item .si-name { font-family: 'Fredoka'; font-weight: 600; font-size: 14px; color: #fff; margin: 4px 0; }
+  .shop-item .si-desc { font-size: 11px; color: #aaa; line-height: 1.2; }
+  .shop-item .si-cost { font-family: 'Fredoka'; font-weight: 700; font-size: 14px; color: #e8a0c0; margin-top: 6px; }
+  .pause-stats { margin-top: 16px; font-size: 14px; color: #a8d8a0; text-align: center; line-height: 1.6; }
+  .pause-hint { margin-top: 14px; font-size: 13px; color: rgba(200,200,200,0.5); }
+
+  /* ─── GAME OVER ─── */
+  #game-over { position: fixed; inset: 0; z-index: 100; display: none; flex-direction: column; align-items: center;
+    justify-content: center; background: rgba(25,35,20,0.92); backdrop-filter: blur(8px); cursor: auto; }
+  #game-over.show { display: flex; }
+  .go-title { font-family: 'Gaegu', cursive; font-size: 54px; font-weight: 700; color: #ff6b6b; text-shadow: 0 4px 20px rgba(255,80,80,0.3); }
+  .go-score { font-family: 'Fredoka'; font-size: 22px; color: #a8d8a0; margin-top: 12px; }
+
+  /* ─── MESSAGE ─── */
+  #msg { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 50;
+    font-family: 'Gaegu', cursive; font-size: 44px; font-weight: 700; color: #ffde59;
+    text-shadow: 0 3px 0 #8b6a00, 0 0 30px rgba(255,220,50,0.5); pointer-events: none;
+    opacity: 0; transition: opacity 0.3s; text-align: center; }
+  #msg.show { opacity: 1; }
+
+  /* ─── TUTORIAL ─── */
+  #tut { position: fixed; bottom: 65px; left: 50%; transform: translateX(-50%); z-index: 20; pointer-events: none; }
+  .tut-msg { font-family: 'Fredoka'; font-weight: 600; font-size: 18px; color: #fff;
+    background: rgba(30,40,20,0.85); border: 2px solid rgba(200,180,80,0.5); border-radius: 12px;
+    padding: 8px 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); display: none; white-space: nowrap; }
+  .tut-msg.active { display: block; animation: tutIn 0.3s ease; }
+  .tut-msg kbd { background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px;
+    padding: 0 5px; font-family: 'Fredoka'; color: #ffe8a0; font-size: 15px; }
+  @keyframes tutIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</head>
+<body>
+<canvas id="renderCanvas"></canvas>
+
+<!-- HUD TOP -->
+<div id="hud-top">
+  <div class="hp" style="min-width:120px"><div class="lab">🍎 Food</div><div class="val" id="h-food">10</div>
+    <div class="food-bar"><div class="food-bar-fill" id="food-bar"></div></div></div>
+  <div class="hp"><div class="lab">🌙 Wave</div><div class="val" id="h-wave">1</div></div>
+  <div class="hp"><div class="lab">🧁 Cupcakes</div><div class="val" id="h-shards">0</div></div>
+  <div class="hp"><div class="lab">🪵 Carry</div><div class="val" id="h-wood">0</div></div>
+  <div class="hp"><div class="lab">🏗️ Stockpile</div><div class="val" id="h-stockpile">0</div></div>
+  <div class="hp"><div class="lab">🧱 Fence</div><div class="val" id="h-fence">L1: 0/32</div></div>
+  <div class="hp"><div class="lab">⭐ Score</div><div class="val" id="h-score">0</div></div>
+  <div class="hp"><div class="lab">💀 Hags</div><div class="val" id="h-kills">0</div></div>
+  <div class="hp"><div class="lab">🫐 Fired</div><div class="val" id="h-fired">0</div></div>
+</div>
+
+<!-- WEAPON BAR -->
+<div id="hud-bottom">
+  <div class="weapon-slot active" id="ws-0"><div class="wicon">🫐</div><div class="wname">Berry</div><div class="wkey">1</div></div>
+  <div class="weapon-slot locked" id="ws-1"><div class="wicon">🫐🫐</div><div class="wname">Double</div><div class="wkey">2</div></div>
+  <div class="weapon-slot locked" id="ws-2"><div class="wicon">🥧</div><div class="wname">Pie-tapult</div><div class="wkey">3</div></div>
+  <div class="weapon-slot locked" id="ws-3"><div class="wicon">🥤</div><div class="wname">Smoothie</div><div class="wkey">4</div></div>
+</div>
+
+<div id="crosshair"><div class="ch-ring"></div><div class="ch-dot"></div>
+  <div class="ch-line top"></div><div class="ch-line bottom"></div><div class="ch-line left"></div><div class="ch-line right"></div></div>
+
+<!-- TUTORIAL -->
+<div id="tut">
+  <div class="tut-msg" id="t-move">🎮 <kbd>WASD</kbd> move · <kbd>Click</kbd> fire · Chop trees for 🪵 · <kbd>F</kbd> at well = deposit wood · Snoodles build fences! · <kbd>SPACE</kbd> shop</div>
+</div>
+
+<!-- TITLE -->
+<div id="title-screen">
+  <div style="font-size:60px;animation:titleBounce 1.5s ease-in-out infinite">🍄</div>
+  <div class="title-text">Snoodles</div>
+  <div class="subtitle">Protect the Village!</div>
+  <button class="start-btn" id="startBtn">Play!</button>
+  <div class="how-box">
+    <h3>How to Play</h3>
+    <div class="row"><span class="ic">🏃</span><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Click</kbd> fire Berry Blaster</span></div>
+    <div class="row"><span class="ic">💀</span><span>Forest Hags steal food. Blast them — they <strong style="color:#ff6b6b">explode into voxels</strong>!</span></div>
+    <div class="row"><span class="ic">🧁</span><span>Destroyed hags drop <strong style="color:#e8a0c0">Cupcakes</strong>. Collect them!</span></div>
+    <div class="row"><span class="ic">🛒</span><span>Press <kbd>SPACE</kbd> to pause & spend cupcakes on <strong style="color:#ffde59">upgrades</strong></span></div>
+    <div class="row"><span class="ic">🪵</span><span>Shoot trees (8 hits) for <strong style="color:#a07040">Wood</strong> — walk over logs to collect</span></div>
+    <div class="row"><span class="ic">🧱</span><span>Press <kbd>F</kbd> at the <strong>well</strong> to deposit wood. <strong style="color:#8bc34a">Snoodles</strong> grab it and build fences!</span></div>
+    <div class="row"><span class="ic">🔄</span><span>Trees <strong>regrow</strong> over time. Fence levels increase once all 32 segments are built!</span></div>
+    <div class="row"><span class="ic">⚡</span><span>Grab <strong style="color:#7dff7d">power-ups</strong> that spawn during waves!</span></div>
+  </div>
+</div>
+
+<!-- PAUSE / SHOP -->
+<div id="pause-screen">
+  <div class="pause-title">Shop</div>
+  <div class="pause-stats" id="shop-stats"></div>
+  <div class="shop-grid" id="shop-grid"></div>
+  <div class="pause-hint">Press <kbd>SPACE</kbd> to resume</div>
+</div>
+
+<!-- GAME OVER -->
+<div id="game-over">
+  <div class="go-title" id="go-title">The Hag Devoured Everything...</div>
+  <div class="go-score" id="go-score"></div>
+  <button class="start-btn" id="restartBtn" style="margin-top:24px">Try Again!</button>
+</div>
+
+<div id="msg"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/7.0.0/babylon.js"></script>
+<script>
+const canvas = document.getElementById('renderCanvas');
+const engine = new BABYLON.Engine(canvas, true, {stencil:true});
+
+// ─── STATE ───
+let scene, camera, shadowGen, pickPlane;
+let player;
+let hags=[], foodItems=[], berries=[], voxelChunks=[], shardItems=[], fences=[], turrets=[], powerUps=[], droppedFoods=[], woodItems=[];
+let snoodleNPCs=[], trees=[];
+let fenceRingGuide;
+let fenceSlotLevel = new Array(32).fill(0); // 0=empty, 1=basic, 2=reinforced, 3=fortified...
+let mouseGround = new BABYLON.Vector3();
+let keys={}, screenShake=0;
+
+const GS = 40; // ground size
+const CAMP_RADIUS = 14;
+const FENCE_SEG_WIDTH = 2.75;
+const FENCE_TOTAL = 32; // segments for full enclosure (2π×14 / 2.75 ≈ 32)
+
+// Stats / resources
+let S = {};
+function resetState() {
+  S = {
+    food:10, maxFood:10, score:0, wave:1, active:false, paused:false,
+    shards:0, wood:0, woodStockpile:0, kills:0, fired:0,
+    cooldown:0, curWeapon:0,
+    // upgrades
+    berryDmg:1, fireRateMult:1,
+    hasDouble:false, hasPie:false, hasSmoothie:false,
+    turretCount:0, turretPlaced:0,
+    // wave mgmt
+    waveState:"waiting", waveCdTimer:0, hagsToSpawn:0, hagsSpawned:0
+  };
+}
+resetState();
+
+// Weapon defs
+const WEAPONS = [
+  {name:"Berry",      icon:"🫐",   cd:0.35, dmg:1, type:"single",   unlocked:()=>true},
+  {name:"Double",     icon:"🫐🫐", cd:0.45, dmg:1, type:"double",   unlocked:()=>S.hasDouble},
+  {name:"Pie-tapult", icon:"🥧",   cd:1.4,  dmg:4, type:"pie",      unlocked:()=>S.hasPie},
+  {name:"Smoothie",   icon:"🥤",   cd:1.8,  dmg:3, type:"smoothie", unlocked:()=>S.hasSmoothie},
+];
+
+// Shop items
+const SHOP = [
+  {id:"dmg",   name:"Berry Power +1",    icon:"💪", desc:"All weapons +1 BP",       cost:6,  repeatable:true,  apply:()=>{S.berryDmg++;}},
+  {id:"rate",  name:"Fire Rate +25%",    icon:"⚡", desc:"Shoot faster",             cost:8,  repeatable:true,  apply:()=>{S.fireRateMult*=0.75;}},
+  {id:"dbl",   name:"Double-Barrel",     icon:"🫐🫐",desc:"Fires 2 spread berries", cost:10, repeatable:false, apply:()=>{S.hasDouble=true;}, check:()=>!S.hasDouble},
+  {id:"pie",   name:"Pie-tapult",        icon:"🥧", desc:"4 BP area splash",        cost:15, repeatable:false, apply:()=>{S.hasPie=true;}, check:()=>!S.hasPie},
+  {id:"smooth",name:"Smoothie Grenade",  icon:"🥤", desc:"3 BP blast radius",       cost:12, repeatable:false, apply:()=>{S.hasSmoothie=true;}, check:()=>!S.hasSmoothie},
+  {id:"turret",name:"Auto Turret",       icon:"🗼", desc:"Place with T (1 BP/shot)", cost:20, repeatable:true,  apply:()=>{S.turretCount++;}},
+];
+
+// ─── K&C PALETTE ───
+const C3 = (r,g,b) => new BABYLON.Color3(r,g,b);
+const V3 = (x,y,z) => new BABYLON.Vector3(x,y,z);
+
+const P = {
+  grass1:    C3(0.42, 0.62, 0.28),
+  grass2:    C3(0.48, 0.68, 0.32),
+  grass3:    C3(0.36, 0.52, 0.22),
+  dirt:      C3(0.58, 0.45, 0.30),
+  stone:     C3(0.60, 0.58, 0.54),
+  stoneDk:   C3(0.45, 0.43, 0.40),
+  cream:     C3(0.92, 0.86, 0.72),
+  timber:    C3(0.50, 0.35, 0.18),
+  roofR:     C3(0.72, 0.28, 0.18),
+  roofB:     C3(0.30, 0.42, 0.58),
+  roofG:     C3(0.32, 0.50, 0.28),
+  trunk:     C3(0.48, 0.34, 0.18),
+  foli1:     C3(0.32, 0.55, 0.22),
+  foli2:     C3(0.28, 0.48, 0.18),
+  foli3:     C3(0.38, 0.60, 0.28),
+  water:     C3(0.35, 0.58, 0.72),
+  hay:       C3(0.82, 0.72, 0.35),
+  crop:      C3(0.55, 0.70, 0.25),
+};
+
+// Flat material (K&C = no specular, flat shading)
+function fmat(c, opts={}) {
+  const m = new BABYLON.StandardMaterial("fm"+Math.random(), scene);
+  m.diffuseColor = c;
+  m.specularColor = BABYLON.Color3.Black();
+  if(opts.em) m.emissiveColor = opts.em;
+  if(opts.a !== undefined) m.alpha = opts.a;
+  if(opts.bf === false) m.backFaceCulling = false;
+  return m;
+}
+
+// ─── COLORS / HELPERS (legacy compat) ───
+function mat(c, s, o={}) {
+  const m = new BABYLON.StandardMaterial("m"+Math.random(), s);
+  m.diffuseColor = c;
+  if(o.em) m.emissiveColor = o.em;
+  m.specularPower = o.sp||8;
+  if(o.ns) m.specularColor = BABYLON.Color3.Black();
+  if(o.a!==undefined) m.alpha = o.a;
+  if(o.bf===false) m.backFaceCulling = false;
+  return m;
+}
+
+// ─── SCENE ───
+function createScene() {
+  scene = new BABYLON.Scene(engine);
+  scene.clearColor = new BABYLON.Color4(0.55, 0.75, 0.92, 1); // warm blue sky
+  scene.ambientColor = C3(0.45, 0.42, 0.38);
+  scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+  scene.fogDensity = 0.005;
+  scene.fogColor = C3(0.6, 0.72, 0.82); // hazy blue distance
+
+  camera = new BABYLON.ArcRotateCamera("cam", -Math.PI/2, Math.PI/3.5, 42, V3(0,0,0), scene);
+  camera.lowerBetaLimit = 0.4;
+  camera.upperBetaLimit = Math.PI/2.6;
+  camera.lowerRadiusLimit = 25;
+  camera.upperRadiusLimit = 65;
+  camera.panningSensibility = 0;
+  camera.wheelPrecision = 15;
+  camera.fov = 0.65; // slightly narrower for miniature feel
+
+  // Warm golden sunlight
+  const hemi = new BABYLON.HemisphericLight("h", V3(0.2,1,0.1), scene);
+  hemi.intensity = 0.65;
+  hemi.diffuse = C3(0.95, 0.92, 0.85);
+  hemi.groundColor = C3(0.25, 0.30, 0.20);
+
+  const dir = new BABYLON.DirectionalLight("d", V3(-0.8,-2,-1), scene);
+  dir.position = V3(25,35,25); dir.intensity = 0.9;
+  dir.diffuse = C3(1.0, 0.92, 0.75); // golden sun
+
+  shadowGen = new BABYLON.ShadowGenerator(1024, dir);
+  shadowGen.useBlurExponentialShadowMap = true;
+  shadowGen.blurKernel = 12;
+  shadowGen.darkness = 0.28;
+  shadowGen.bias = 0.001;
+
+  // Warm fill light
+  const warm = new BABYLON.PointLight("w", V3(0,10,0), scene);
+  warm.intensity = 0.25; warm.diffuse = C3(1,0.9,0.7); warm.range = 40;
+
+  // Post-processing pipeline (graceful degradation)
+  try {
+    const pipeline = new BABYLON.DefaultRenderingPipeline("pp", true, scene, [camera]);
+    pipeline.bloomEnabled = true;
+    pipeline.bloomThreshold = 0.75;
+    pipeline.bloomWeight = 0.15;
+    pipeline.bloomKernel = 32;
+    pipeline.bloomScale = 0.5;
+
+    pipeline.imageProcessingEnabled = true;
+    pipeline.imageProcessing.contrast = 1.15;
+    pipeline.imageProcessing.exposure = 1.05;
+    pipeline.imageProcessing.toneMappingEnabled = true;
+    pipeline.imageProcessing.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES;
+    pipeline.imageProcessing.vignetteEnabled = true;
+    pipeline.imageProcessing.vignetteWeight = 1.2;
+    pipeline.imageProcessing.vignetteColor = new BABYLON.Color4(0.1, 0.08, 0.05, 0);
+
+    pipeline.depthOfFieldEnabled = true;
+    pipeline.depthOfFieldBlurLevel = BABYLON.DepthOfFieldEffectBlurLevel.Low;
+    pipeline.depthOfField.focalLength = 80;
+    pipeline.depthOfField.fStop = 4;
+    pipeline.depthOfField.focusDistance = 4200;
+  } catch(e) { console.warn("Post-processing not available:", e); }
+
+  buildGround();
+  buildVillage();
+  spawnPlayer();
+  spawnNPCs(5);
+  buildForest();
+  buildDecorations();
+  buildFenceRingGuide();
+
+  // Pick plane
+  pickPlane = BABYLON.MeshBuilder.CreateGround("pp", {width:GS*3,height:GS*3}, scene);
+  pickPlane.position.y = 0.01; pickPlane.visibility = 0; pickPlane.isPickable = true;
+  scene.meshes.forEach(m => { if(m.name!=="pp") m.isPickable = false; });
+
+  scene.onPointerMove = function(e) {
+    const p = scene.pick(e.offsetX, e.offsetY, m=>m.name==="pp");
+    if(p.hit) mouseGround = p.pickedPoint.clone();
+    const ch = document.getElementById('crosshair');
+    ch.style.left = e.clientX+'px'; ch.style.top = e.clientY+'px'; ch.style.display='block';
+  };
+
+  scene.onPointerDown = function(e) {
+    if(e.button!==0||!S.active||S.paused||S.cooldown>0) return;
+    fireWeapon();
+  };
+
+  return scene;
+}
+
+// ─── GROUND (K&C Style) ───
+function buildGround() {
+  // Main grass plane
+  const ground = BABYLON.MeshBuilder.CreateGround("ground", {width:GS*2,height:GS*2,subdivisions:2}, scene);
+  ground.receiveShadows = true;
+  ground.material = fmat(P.grass1);
+
+  // Village area - lighter grass disc
+  const village = BABYLON.MeshBuilder.CreateDisc("village", {radius:16, tessellation:24}, scene);
+  village.rotation.x = Math.PI/2;
+  village.position.y = 0.02; village.receiveShadows = true;
+  village.material = fmat(P.grass2);
+
+  // Stone border ring around village
+  const edgePieces = 28;
+  for(let i=0;i<edgePieces;i++) {
+    const angle = (i/edgePieces)*Math.PI*2;
+    const r = 15.5;
+    const block = BABYLON.MeshBuilder.CreateBox("edge"+i, {width:2.2, height:0.4, depth:0.5}, scene);
+    block.position = V3(Math.cos(angle)*r, 0.2, Math.sin(angle)*r);
+    block.rotation.y = angle + Math.PI/2;
+    block.material = fmat(P.stone); block.receiveShadows = true; shadowGen.addShadowCaster(block);
+  }
+
+  // Dirt paths (cross shape)
+  const paths = [
+    {w:2.5, d:28, x:0, z:0},
+    {w:28, d:2.5, x:0, z:0},
+  ];
+  paths.forEach((p,i) => {
+    const path = BABYLON.MeshBuilder.CreateBox("path"+i, {width:p.w, height:0.05, depth:p.d}, scene);
+    path.position = V3(p.x, 0.03, p.z);
+    path.material = fmat(P.dirt); path.receiveShadows = true;
+  });
+
+  // Scattered dirt patches
+  for(let i=0;i<8;i++) {
+    const patch = BABYLON.MeshBuilder.CreateDisc("dp"+i, {radius:1.5+Math.random()*2, tessellation:8}, scene);
+    patch.rotation.x = Math.PI/2;
+    patch.position = V3((Math.random()-0.5)*20, 0.03, (Math.random()-0.5)*20);
+    patch.material = fmat(P.dirt, {a:0.5});
+  }
+
+  // Outer darker grass
+  const outerRing = BABYLON.MeshBuilder.CreateGround("outer", {width:GS*2.5, height:GS*2.5, subdivisions:1}, scene);
+  outerRing.position.y = -0.02; outerRing.receiveShadows = true;
+  outerRing.material = fmat(P.grass3);
+
+  // Water border
+  const waterRing = BABYLON.MeshBuilder.CreateGround("water", {width:GS*3, height:GS*3, subdivisions:1}, scene);
+  waterRing.position.y = -0.2;
+  waterRing.material = fmat(P.water, {em: C3(0.05, 0.1, 0.15)});
+
+  // Crop patches
+  const cropPositions = [{x:-12,z:2},{x:11,z:-3},{x:-3,z:-11},{x:5,z:10}];
+  cropPositions.forEach((cp,i) => {
+    const base = BABYLON.MeshBuilder.CreateBox("crop"+i, {width:4, height:0.1, depth:3}, scene);
+    base.position = V3(cp.x, 0.05, cp.z); base.material = fmat(C3(0.42, 0.36, 0.22)); base.receiveShadows = true;
+    for(let r=0;r<4;r++) {
+      const row = BABYLON.MeshBuilder.CreateBox("cr"+i+"_"+r, {width:3.5, height:0.25+Math.random()*0.15, depth:0.3}, scene);
+      row.position = V3(cp.x, 0.2, cp.z-1.1+r*0.75);
+      row.material = fmat([P.crop, P.hay, C3(0.6,0.5,0.2), P.crop][r]);
+      shadowGen.addShadowCaster(row);
+    }
+  });
+
+  // Stone walls (decorative)
+  for(let i=0;i<6;i++) {
+    const angle = (i/6)*Math.PI*2 + 0.3;
+    const r = 12 + Math.random()*2;
+    const len = 2+Math.random()*3;
+    const wall = BABYLON.MeshBuilder.CreateBox("sw"+i, {width:len, height:0.5, depth:0.35}, scene);
+    wall.position = V3(Math.cos(angle)*r, 0.25, Math.sin(angle)*r);
+    wall.rotation.y = angle + Math.PI/2 + (Math.random()-0.5)*0.3;
+    wall.material = fmat(i%2===0 ? P.stone : P.stoneDk); shadowGen.addShadowCaster(wall);
+    wall.receiveShadows = true;
+  }
+}
+
+// ─── VILLAGE (K&C Style) ───
+function buildVillage() {
+  const houses = [
+    {x:-7,z:-6, rw:3, rd:3, rh:2.2, roof:P.roofR},
+    {x:7, z:-5, rw:2.8,rd:2.5,rh:2,  roof:P.roofB},
+    {x:-6,z:7,  rw:2.5,rd:3,  rh:2,  roof:P.roofG},
+    {x:8, z:6,  rw:3,  rd:2.8,rh:2.2,roof:P.roofR},
+    {x:0, z:-9, rw:2.5,rd:2.5,rh:1.8,roof:P.roofB},
+    {x:-10,z:0, rw:3.2,rd:2.5,rh:2,  roof:P.roofG},
+  ];
+  houses.forEach((h,i) => {
+    const par = new BABYLON.TransformNode("house"+i, scene);
+    par.position = V3(h.x, 0, h.z);
+
+    // Walls
+    const wall = BABYLON.MeshBuilder.CreateBox("hw"+i,{width:h.rw,height:h.rh,depth:h.rd},scene);
+    wall.position.y = h.rh/2; wall.parent = par;
+    wall.material = fmat(P.cream); shadowGen.addShadowCaster(wall); wall.receiveShadows = true;
+
+    // Timber cross beams
+    const beamH = BABYLON.MeshBuilder.CreateBox("hbh"+i,{width:h.rw+0.1,height:0.12,depth:0.12},scene);
+    beamH.position = V3(0, h.rh*0.6, h.rd/2+0.01); beamH.parent = par;
+    beamH.material = fmat(P.timber); shadowGen.addShadowCaster(beamH);
+    const beamV = BABYLON.MeshBuilder.CreateBox("hbv"+i,{width:0.12,height:h.rh,depth:0.12},scene);
+    beamV.position = V3(0, h.rh/2, h.rd/2+0.01); beamV.parent = par;
+    beamV.material = fmat(P.timber);
+
+    // Roof (steep 4-sided pyramid)
+    const roof = BABYLON.MeshBuilder.CreateCylinder("hr"+i,{height:1.6,diameterTop:0,diameterBottom:Math.max(h.rw,h.rd)*1.5,tessellation:4},scene);
+    roof.position.y = h.rh+0.8; roof.rotation.y = Math.PI/4; roof.parent = par;
+    roof.material = fmat(h.roof); shadowGen.addShadowCaster(roof);
+
+    // Door
+    const door = BABYLON.MeshBuilder.CreateBox("hd"+i,{width:0.6,height:1.1,depth:0.1},scene);
+    door.position = V3(0, 0.55, h.rd/2+0.05); door.parent = par;
+    door.material = fmat(C3(0.38, 0.25, 0.12));
+
+    // Window
+    const win = BABYLON.MeshBuilder.CreateBox("hwn"+i,{width:0.4,height:0.35,depth:0.1},scene);
+    win.position = V3(h.rw/2+0.05, h.rh*0.6, 0); win.parent = par;
+    win.material = fmat(C3(0.7, 0.82, 0.95), {em: C3(0.08, 0.12, 0.18)});
+
+    // Chimney (every other house)
+    if(i%2===0) {
+      const chim = BABYLON.MeshBuilder.CreateBox("hch"+i,{width:0.4,height:1.2,depth:0.4},scene);
+      chim.position = V3(h.rw*0.3, h.rh+0.8, -h.rd*0.2); chim.parent = par;
+      chim.material = fmat(P.stone); shadowGen.addShadowCaster(chim);
+    }
+  });
+
+  // Well (central)
+  const wellBase = BABYLON.MeshBuilder.CreateCylinder("wl",{height:0.8,diameter:2,tessellation:8},scene);
+  wellBase.position.y = 0.4; wellBase.material = fmat(P.stone); shadowGen.addShadowCaster(wellBase); wellBase.receiveShadows=true;
+  const wellRim = BABYLON.MeshBuilder.CreateTorus("wr",{diameter:2.1,thickness:0.2,tessellation:16},scene);
+  wellRim.position.y = 0.85; wellRim.material = fmat(P.stoneDk);
+  // Well roof
+  [-.6,.6].forEach(xo => {
+    const post = BABYLON.MeshBuilder.CreateBox("wp",{width:0.12,height:1.4,depth:0.12},scene);
+    post.position = V3(xo, 1.5, 0); post.material = fmat(P.timber); shadowGen.addShadowCaster(post);
+  });
+  const wellRoof = BABYLON.MeshBuilder.CreateCylinder("wrf",{height:0.5,diameterTop:0,diameterBottom:1.8,tessellation:4},scene);
+  wellRoof.position.y = 2.45; wellRoof.rotation.y = Math.PI/4;
+  wellRoof.material = fmat(P.roofR); shadowGen.addShadowCaster(wellRoof);
+}
+
+// ─── TREES ───
+function buildForest() {
+  // Perimeter
+  for(let i=0;i<45;i++) {
+    const a=(i/45)*Math.PI*2+(Math.random()-0.5)*0.15;
+    const r=GS*0.72+Math.random()*7;
+    buildTree(Math.cos(a)*r, Math.sin(a)*r, 1+Math.random()*2);
+  }
+  // Inner ring (choppable)
+  for(let i=0;i<18;i++) {
+    const a=(i/18)*Math.PI*2+0.1;
+    const r=GS*0.42+Math.random()*6;
+    buildTree(Math.cos(a)*r, Math.sin(a)*r, 0.8+Math.random()*1.2);
+  }
+}
+
+function buildTree(x,z,sc) {
+  const root = new BABYLON.TransformNode("tree"+Math.random(), scene);
+  root.position = V3(x,0,z);
+
+  // Chunky trunk
+  const trunk = BABYLON.MeshBuilder.CreateCylinder("tk",{height:2*sc,diameterTop:.25*sc,diameterBottom:.5*sc,tessellation:6},scene);
+  trunk.position.y = sc; trunk.parent = root;
+  trunk.material = fmat(P.trunk); shadowGen.addShadowCaster(trunk);
+
+  // K&C style: 2-3 rounded puffball clusters
+  const foliColors = [P.foli1, P.foli2, P.foli3];
+  const clusters = 2 + Math.floor(Math.random()*2);
+  for(let i=0;i<clusters;i++) {
+    const sz = (1.2 + Math.random()*0.8) * sc;
+    const fol = BABYLON.MeshBuilder.CreateSphere("fol"+i, {diameter:sz, segments:8}, scene);
+    fol.position = V3(
+      (Math.random()-0.5)*0.6*sc,
+      sc*1.8 + i*0.4*sc,
+      (Math.random()-0.5)*0.6*sc
+    );
+    fol.scaling.y = 0.7 + Math.random()*0.2; // slightly squished
+    fol.parent = root;
+    fol.material = fmat(foliColors[i % 3]);
+    shadowGen.addShadowCaster(fol);
+  }
+
+  root._hp = 8;
+  root._maxHp = 8;
+  root._alive = true;
+  root._scale = sc;
+  trees.push(root);
+}
+
+function buildDecorations() {
+  // Hay bales near houses
+  const hayPositions = [{x:-4,z:-8},{x:9,z:-7},{x:-8,z:5},{x:10,z:4},{x:-12,z:-2}];
+  hayPositions.forEach((hp,i) => {
+    const bale = BABYLON.MeshBuilder.CreateCylinder("hay"+i,{height:0.8,diameter:0.9,tessellation:8},scene);
+    bale.position = V3(hp.x, 0.45, hp.z); bale.rotation.z = Math.PI/2;
+    bale.rotation.y = Math.random()*Math.PI;
+    bale.material = fmat(P.hay); shadowGen.addShadowCaster(bale);
+  });
+
+  // Log piles
+  const logPositions = [{x:-5,z:4},{x:5,z:-2},{x:3,z:8}];
+  logPositions.forEach((lp,i) => {
+    for(let r=0;r<3;r++) {
+      const log = BABYLON.MeshBuilder.CreateCylinder("log"+i+"_"+r,{height:1.2,diameter:0.25,tessellation:6},scene);
+      log.position = V3(lp.x+(r-1)*0.3, 0.13+Math.floor(r/2)*0.22, lp.z);
+      log.rotation.z = Math.PI/2; log.rotation.y = 0.05*(r-1);
+      log.material = fmat(P.trunk); shadowGen.addShadowCaster(log);
+    }
+  });
+
+  // Barrels near houses
+  const barrelPos = [{x:-6,z:-4},{x:8,z:-3},{x:-9,z:2}];
+  barrelPos.forEach((bp,i) => {
+    const barrel = BABYLON.MeshBuilder.CreateCylinder("bar"+i,{height:0.9,diameterTop:0.55,diameterBottom:0.6,tessellation:10},scene);
+    barrel.position = V3(bp.x, 0.45, bp.z);
+    barrel.material = fmat(C3(0.55, 0.38, 0.20)); shadowGen.addShadowCaster(barrel);
+    // Metal band
+    const band = BABYLON.MeshBuilder.CreateTorus("band"+i,{diameter:0.58,thickness:0.04,tessellation:12},scene);
+    band.position = V3(bp.x, 0.6, bp.z);
+    band.material = fmat(P.stoneDk);
+  });
+
+  // Flower patches
+  const flowerCols = [C3(0.9,0.4,0.45), C3(0.95,0.8,0.3), C3(0.6,0.45,0.8), C3(1,0.65,0.7)];
+  for(let i=0;i<20;i++) {
+    const x = (Math.random()-0.5)*GS*0.45;
+    const z = (Math.random()-0.5)*GS*0.45;
+    const stem = BABYLON.MeshBuilder.CreateCylinder("fs"+i,{height:0.35,diameter:0.06,tessellation:4},scene);
+    stem.position = V3(x, 0.18, z); stem.material = fmat(C3(0.35, 0.50, 0.22));
+    const head = BABYLON.MeshBuilder.CreateSphere("fh"+i,{diameter:0.2,segments:6},scene);
+    head.position = V3(x, 0.4, z);
+    head.material = fmat(flowerCols[(Math.random()*4)|0]);
+  }
+
+  // Mushrooms (fewer, more intentional)
+  for(let i=0;i<6;i++) {
+    const x = (Math.random()-0.5)*GS*0.5;
+    const z = (Math.random()-0.5)*GS*0.5;
+    const stem = BABYLON.MeshBuilder.CreateCylinder("ms"+i,{height:0.35,diameterTop:0.12,diameterBottom:0.15,tessellation:6},scene);
+    stem.position = V3(x, 0.18, z); stem.material = fmat(C3(0.92, 0.88, 0.80));
+    const cap = BABYLON.MeshBuilder.CreateSphere("mc"+i,{diameter:0.4,segments:6},scene);
+    cap.scaling.y = 0.45; cap.position = V3(x, 0.4, z);
+    cap.material = fmat(C3(0.82, 0.22, 0.20));
+  }
+}
+
+// ─── SNOODLE (K&C Style - rounder, cleaner) ───
+function createSnoodle(name, col, isP) {
+  const root = new BABYLON.TransformNode(name, scene);
+  const body = BABYLON.MeshBuilder.CreateSphere(name+"b",{diameter:1.4,segments:10},scene);
+  body.scaling=V3(1,.9,.95); body.position.y=.8; body.parent=root; body.material=fmat(col); shadowGen.addShadowCaster(body);
+
+  const belly = BABYLON.MeshBuilder.CreateSphere(name+"bl",{diameter:.9,segments:8},scene);
+  belly.position=V3(0,.7,.35); belly.scaling=V3(.8,.7,.5); belly.parent=root; belly.material=fmat(C3(.95,.92,.82));
+
+  [-.22,.22].forEach((xo,i) => {
+    const ew=BABYLON.MeshBuilder.CreateSphere(name+"ew"+i,{diameter:.32,segments:8},scene);
+    ew.position=V3(xo,1.05,.55); ew.parent=root; ew.material=fmat(C3(.98,.98,1));
+    const ep=BABYLON.MeshBuilder.CreateSphere(name+"ep"+i,{diameter:.18,segments:6},scene);
+    ep.position=V3(xo,1.05,.67); ep.parent=root; ep.material=fmat(C3(.15,.12,.08));
+    const es=BABYLON.MeshBuilder.CreateSphere(name+"es"+i,{diameter:.06,segments:4},scene);
+    es.position=V3(xo+.05,1.1,.72); es.parent=root; es.material=fmat(C3(1,1,1),{em:C3(.8,.8,.8)});
+  });
+  [-.4,.4].forEach((xo,i) => {
+    const ch=BABYLON.MeshBuilder.CreateSphere(name+"ch"+i,{diameter:.22,segments:6},scene);
+    ch.position=V3(xo,.85,.55); ch.parent=root; ch.material=fmat(C3(.95,.55,.50));
+  });
+  [-.3,.3].forEach((xo,i) => {
+    const ft=BABYLON.MeshBuilder.CreateSphere(name+"ft"+i,{diameter:.35,segments:6},scene);
+    ft.scaling=V3(1,.5,1.3); ft.position=V3(xo,.12,.1); ft.parent=root; ft.material=fmat(col.scale(.8)); shadowGen.addShadowCaster(ft);
+  });
+  [-.35,.35].forEach((xo,i) => {
+    const ear=BABYLON.MeshBuilder.CreateSphere(name+"ear"+i,{diameter:.3,segments:6},scene);
+    ear.position=V3(xo,1.35,0); ear.parent=root; ear.material=fmat(col.scale(1.1));
+  });
+  if(isP) {
+    const arrow=BABYLON.MeshBuilder.CreateCylinder(name+"ar",{height:.4,diameterTop:0,diameterBottom:.35,tessellation:3},scene);
+    arrow.position.y=2; arrow.parent=root; arrow.material=fmat(C3(1,.85,0),{em:C3(.5,.4,0)}); root._arrow=arrow;
+    const ring=BABYLON.MeshBuilder.CreateTorus(name+"rg",{diameter:1.6,thickness:.1,tessellation:24},scene);
+    ring.position.y=.05; ring.parent=root; ring.material=fmat(C3(1,.9,.2),{em:C3(.3,.25,.05)});
+  }
+  root._bob = Math.random()*Math.PI*2;
+  return root;
+}
+
+// ─── HAG (K&C Style) ───
+function createHag() {
+  const root = new BABYLON.TransformNode("hag"+Math.random(), scene);
+  const body=BABYLON.MeshBuilder.CreateCylinder("hb",{height:2.2,diameterTop:.6,diameterBottom:1,tessellation:8},scene);
+  body.position.y=1.3; body.parent=root; body.material=fmat(C3(.32,.25,.20)); shadowGen.addShadowCaster(body);
+  const cloak=BABYLON.MeshBuilder.CreateCylinder("hc",{height:2.5,diameterTop:1.6,diameterBottom:.3,tessellation:8},scene);
+  cloak.position.y=1.4; cloak.parent=root; const cm=fmat(C3(.22,.30,.18),{a:.85}); cloak.material=cm; shadowGen.addShadowCaster(cloak);
+  const head=BABYLON.MeshBuilder.CreateSphere("hh",{diameter:.9,segments:8},scene);
+  head.position.y=2.6; head.scaling=V3(.8,1,.8); head.parent=root; head.material=fmat(C3(.40,.30,.22));
+  [-.15,.15].forEach((xo,i)=>{
+    const eye=BABYLON.MeshBuilder.CreateSphere("he"+i,{diameter:.16,segments:6},scene);
+    eye.position=V3(xo,2.7,.35); eye.parent=root; eye.material=fmat(C3(.75,.90,.20),{em:C3(.4,.5,.1)});
+  });
+  [-.5,.5].forEach((xo,i)=>{
+    const arm=BABYLON.MeshBuilder.CreateCylinder("ha"+i,{height:1.2,diameterTop:.08,diameterBottom:.18,tessellation:5},scene);
+    arm.position=V3(xo*1.4,1.6,.2); arm.rotation.z=xo>0?-.5:.5; arm.parent=root; arm.material=fmat(C3(.28,.20,.15));
+  });
+  // Exclamation
+  const ex=BABYLON.MeshBuilder.CreateCylinder("hx",{height:.4,diameterTop:.12,diameterBottom:.15,tessellation:6},scene);
+  ex.position.y=3.4; ex.parent=root; ex.material=fmat(C3(.9,.2,.15),{em:C3(.6,.1,.05)});
+  const exd=BABYLON.MeshBuilder.CreateSphere("hxd",{diameter:.14,segments:4},scene);
+  exd.position.y=3.05; exd.parent=root; exd.material=ex.material;
+  root._ex=ex; root._exd=exd;
+
+  const hp = 1+Math.floor(S.wave*0.25);
+  root._hp=hp; root._maxHp=hp;
+  root._bob=Math.random()*Math.PI*2;
+  root._target=null; root._state="seeking"; root._grabTimer=0;
+  root._rammingFence=null; root._ramTimer=0;
+  root._chosenEntry=undefined; root._entryIsGap=false;
+
+  // HP bar if >1
+  if(hp>1) {
+    const bg=BABYLON.MeshBuilder.CreatePlane("hpb",{width:1.2,height:.15},scene);
+    bg.position.y=3.7; bg.parent=root; bg.billboardMode=BABYLON.Mesh.BILLBOARDMODE_ALL;
+    bg.material=fmat(C3(.15,.12,.08),{em:C3(.06,.04,.02)}); bg.renderingGroupId=1;
+    const fill=BABYLON.MeshBuilder.CreatePlane("hpf",{width:1.1,height:.1},scene);
+    fill.position.y=3.7; fill.parent=root; fill.billboardMode=BABYLON.Mesh.BILLBOARDMODE_ALL;
+    fill.material=fmat(C3(.85,.2,.15),{em:C3(.5,.1,.05)}); fill.renderingGroupId=1;
+    root._hpBar=fill;
+  }
+  return root;
+}
+
+// ─── FOOD (K&C Style) ───
+function createFood(x,z) {
+  const root = new BABYLON.TransformNode("food"+Math.random(), scene);
+  root.position = V3(x,0,z);
+  const base=BABYLON.MeshBuilder.CreateCylinder("fb",{height:.3,diameterTop:.6,diameterBottom:.7,tessellation:8},scene);
+  base.position.y=.15; base.parent=root; base.material=fmat(C3(.58,.42,.22));
+  const fc=[C3(.85,.25,.18),C3(.95,.78,.2),C3(.55,.72,.22),C3(.88,.48,.12)];
+  for(let i=0;i<3;i++){
+    const it=BABYLON.MeshBuilder.CreateSphere("fi"+i,{diameter:.3,segments:6},scene);
+    it.position=V3((Math.random()-.5)*.2,.35+i*.15,(Math.random()-.5)*.2);
+    it.parent=root; it.material=fmat(fc[(Math.random()*4)|0]); shadowGen.addShadowCaster(it);
+  }
+  const glow=BABYLON.MeshBuilder.CreateTorus("fg",{diameter:1.2,thickness:.06,tessellation:24},scene);
+  glow.position.y=.03; glow.parent=root; glow.material=fmat(C3(.9,.75,.2),{em:C3(.4,.3,.05)});
+  glow.material.disableLighting=true; root._glow=glow;
+  root._bob=Math.random()*Math.PI*2; root._collected=false;
+  return root;
+}
+
+function spawnFood(n) {
+  const spots=[];
+  for(let i=0;i<n;i++){
+    let x,z;
+    for(let t=0;t<50;t++){
+      x=(Math.random()-.5)*GS*.45; z=(Math.random()-.5)*GS*.45;
+      if(spots.every(s=>Math.hypot(s.x-x,s.z-z)>3.5)) break;
+    }
+    spots.push({x,z}); foodItems.push(createFood(x,z));
+  }
+}
+
+// ─── CUPCAKE (currency) ───
+function createShard(pos) {
+  const root = new BABYLON.TransformNode("cupcake"+Math.random(), scene);
+  root.position = pos.clone(); root.position.y = 0.3;
+  // Cupcake base (brown wrapper)
+  const base = BABYLON.MeshBuilder.CreateCylinder("cb",{height:.25,diameterTop:.32,diameterBottom:.22,tessellation:8},scene);
+  base.position.y=.12; base.parent=root; base.material=fmat(C3(.55,.35,.18));
+  // Frosting (pink dome)
+  const frost = BABYLON.MeshBuilder.CreateSphere("cf",{diameter:.35,segments:8},scene);
+  frost.position.y=.32; frost.scaling.y=0.6; frost.parent=root;
+  frost.material=fmat(C3(.92,.55,.70),{em:C3(.25,.1,.15)});
+  // Cherry on top
+  const cherry = BABYLON.MeshBuilder.CreateSphere("cc",{diameter:.12,segments:6},scene);
+  cherry.position.y=.42; cherry.parent=root;
+  cherry.material=fmat(C3(.85,.15,.20),{em:C3(.3,.05,.05)});
+  root._bob=Math.random()*Math.PI*2; root._life=25;
+  shardItems.push(root);
+}
+
+// ─── DROPPED FOOD ───
+function createDroppedFood(pos) {
+  const root = new BABYLON.TransformNode("dfood"+Math.random(), scene);
+  root.position = pos.clone(); root.position.y = 0;
+  const item=BABYLON.MeshBuilder.CreateSphere("df",{diameter:.5,segments:8},scene);
+  item.position.y=.3; item.parent=root; item.material=fmat(C3(.88,.58,.12),{em:C3(.2,.12,.02)});
+  const ring=BABYLON.MeshBuilder.CreateTorus("dr",{diameter:1,thickness:.05,tessellation:20},scene);
+  ring.position.y=.03; ring.parent=root; ring.material=fmat(C3(.9,.55,.1),{em:C3(.4,.2,.05)});
+  ring.material.disableLighting=true;
+  root._ring=ring; root._bob=0; root._life=10;
+  droppedFoods.push(root);
+}
+
+// ─── WOOD PICKUP ───
+function createWoodPickup(pos) {
+  const root = new BABYLON.TransformNode("wood"+Math.random(), scene);
+  root.position = pos.clone(); root.position.y = 0;
+  const log = BABYLON.MeshBuilder.CreateCylinder("wl",{height:.6,diameter:.25,tessellation:6},scene);
+  log.position.y=.2; log.rotation.z=Math.PI/2; log.rotation.y=Math.random()*Math.PI;
+  log.parent=root; log.material=fmat(P.trunk);
+  const log2 = BABYLON.MeshBuilder.CreateCylinder("wl2",{height:.5,diameter:.22,tessellation:6},scene);
+  log2.position=V3(.1,.3,.08); log2.rotation.z=Math.PI/2+.3; log2.rotation.y=Math.random()*Math.PI;
+  log2.parent=root; log2.material=log.material;
+  const glow=BABYLON.MeshBuilder.CreateTorus("wg",{diameter:.8,thickness:.04,tessellation:16},scene);
+  glow.position.y=.03; glow.parent=root; glow.material=fmat(C3(.65,.48,.18),{em:C3(.3,.2,.05)});
+  glow.material.disableLighting=true;
+  root._bob=Math.random()*Math.PI*2; root._life=25;
+  woodItems.push(root);
+}
+
+// ─── FENCE (RING SYSTEM) ───
+function getFenceSlotPos(slotIdx) {
+  const angle = (slotIdx / FENCE_TOTAL) * Math.PI * 2;
+  return {
+    x: Math.cos(angle) * CAMP_RADIUS,
+    z: Math.sin(angle) * CAMP_RADIUS,
+    angle: angle + Math.PI/2
+  };
+}
+
+function getFenceTargetLevel() {
+  const minLvl = Math.min(...fenceSlotLevel);
+  return minLvl + 1;
+}
+
+function findBuildableSlot(fromPos) {
+  const target = getFenceTargetLevel();
+  let bestIdx=-1, bestDist=Infinity;
+  for(let i=0;i<FENCE_TOTAL;i++) {
+    if(fenceSlotLevel[i] >= target) continue;
+    const p = getFenceSlotPos(i);
+    const ref = fromPos || player.position;
+    const d = Math.hypot(ref.x - p.x, ref.z - p.z);
+    if(d<bestDist) { bestDist=d; bestIdx=i; }
+  }
+  return bestIdx;
+}
+
+function findWeakestFenceSlot(fromPos) {
+  // For hags: find the fence with lowest level, then lowest HP
+  let bestIdx=-1, bestScore=Infinity;
+  for(let i=0;i<FENCE_TOTAL;i++) {
+    if(fenceSlotLevel[i] <= 0) continue; // no fence here, walk through
+    const f = fences.find(ff => ff._slotIdx === i);
+    if(!f || f._hp <= 0) continue;
+    const score = fenceSlotLevel[i]*1000 + f._hp; // prioritize lowest level, then lowest HP
+    if(score < bestScore) { bestScore=score; bestIdx=i; }
+  }
+  return bestIdx;
+}
+
+function findGapInFence(fromPos) {
+  // For hags: find a slot with no fence (level 0) nearest to the hag
+  let bestIdx=-1, bestDist=Infinity;
+  for(let i=0;i<FENCE_TOTAL;i++) {
+    if(fenceSlotLevel[i] > 0) {
+      const f = fences.find(ff => ff._slotIdx === i);
+      if(f && f._hp > 0) continue; // fence standing, skip
+    }
+    const p = getFenceSlotPos(i);
+    const d = Math.hypot(fromPos.x - p.x, fromPos.z - p.z);
+    if(d<bestDist) { bestDist=d; bestIdx=i; }
+  }
+  return bestIdx;
+}
+
+function buildFenceAtSlot(slotIdx) {
+  if(slotIdx<0||slotIdx>=FENCE_TOTAL) return;
+  const newLevel = fenceSlotLevel[slotIdx] + 1;
+  fenceSlotLevel[slotIdx] = newLevel;
+
+  // Remove old fence mesh if upgrading
+  const old = fences.find(f => f._slotIdx === slotIdx);
+  if(old) { old.dispose(); fences = fences.filter(f => f !== old); }
+
+  const p = getFenceSlotPos(slotIdx);
+  const root = new BABYLON.TransformNode("fence"+slotIdx, scene);
+  root.position = V3(p.x, 0, p.z);
+  root.rotation.y = p.angle;
+
+  if(newLevel >= 1) {
+    // Level 1: Basic wood fence
+    [-.9,.9].forEach(xo => {
+      const post=BABYLON.MeshBuilder.CreateCylinder("fp",{height:1.3,diameter:.2,tessellation:6},scene);
+      post.position=V3(xo,.65,0); post.parent=root; post.material=fmat(P.trunk); shadowGen.addShadowCaster(post);
+    });
+    for(let i=0;i<3;i++){
+      const bar=BABYLON.MeshBuilder.CreateBox("fb",{width:1.9,height:.12,depth:.12},scene);
+      bar.position=V3(0,.3+i*.35,0); bar.parent=root; bar.material=fmat(P.timber); shadowGen.addShadowCaster(bar);
+    }
+  }
+  if(newLevel >= 2) {
+    // Level 2: Add stone base
+    const base=BABYLON.MeshBuilder.CreateBox("fsb",{width:2.2,height:.5,depth:.4},scene);
+    base.position.y=.25; base.parent=root; base.material=fmat(P.stone); shadowGen.addShadowCaster(base);
+    // Taller posts
+    [-.9,.9].forEach(xo => {
+      const ext=BABYLON.MeshBuilder.CreateCylinder("fpe",{height:.6,diameter:.18,tessellation:6},scene);
+      ext.position=V3(xo,1.6,0); ext.parent=root; ext.material=fmat(P.trunk); shadowGen.addShadowCaster(ext);
+    });
+  }
+  if(newLevel >= 3) {
+    // Level 3: Pointed tips + extra crossbar
+    [-.9,.9].forEach(xo => {
+      const tip=BABYLON.MeshBuilder.CreateCylinder("fpt",{height:.3,diameterTop:0,diameterBottom:.18,tessellation:6},scene);
+      tip.position=V3(xo,2.05,0); tip.parent=root; tip.material=fmat(P.trunk); shadowGen.addShadowCaster(tip);
+    });
+    const topBar=BABYLON.MeshBuilder.CreateBox("ftb",{width:1.9,height:.12,depth:.12},scene);
+    topBar.position=V3(0,1.5,0); topBar.parent=root; topBar.material=fmat(P.timber); shadowGen.addShadowCaster(topBar);
+  }
+
+  root._hp = newLevel * 6;
+  root._maxHp = newLevel * 6;
+  root._slotIdx = slotIdx;
+  root._level = newLevel;
+  fences.push(root);
+  updateFenceGuide();
+  return root;
+}
+
+function updateFenceGuide() {
+  if(!fenceRingGuide) return;
+  const target = getFenceTargetLevel();
+  const built = fenceSlotLevel.filter(l => l >= target).length;
+  if(built >= FENCE_TOTAL) {
+    fenceRingGuide.material.alpha = 0.05;
+  } else {
+    fenceRingGuide.material.alpha = 0.15 + (built/FENCE_TOTAL)*0.2;
+  }
+}
+
+function buildFenceRingGuide() {
+  // Dashed ring showing where fences go
+  fenceRingGuide = BABYLON.MeshBuilder.CreateTorus("fenceGuide",{diameter:CAMP_RADIUS*2,thickness:.12,tessellation:64},scene);
+  fenceRingGuide.position.y = 0.04;
+  fenceRingGuide.material = fmat(C3(.6,.45,.2),{em:C3(.2,.15,.05),a:0.15});
+  fenceRingGuide.material.disableLighting = true;
+
+  for(let i=0;i<FENCE_TOTAL;i++) {
+    const p = getFenceSlotPos(i);
+    const dot = BABYLON.MeshBuilder.CreateDisc("fdot"+i,{radius:.15,tessellation:6},scene);
+    dot.position = V3(p.x, 0.03, p.z);
+    dot.rotation.x = Math.PI/2;
+    dot.material = fmat(C3(.6,.45,.2),{em:C3(.18,.12,.04),a:0.3});
+    dot.material.disableLighting = true;
+  }
+}
+
+// ─── TURRET (K&C Style) ───
+function createTurret(pos) {
+  const root = new BABYLON.TransformNode("turret"+Math.random(), scene);
+  root.position = pos.clone(); root.position.y = 0;
+  const base=BABYLON.MeshBuilder.CreateCylinder("tb",{height:.6,diameterTop:.8,diameterBottom:1,tessellation:8},scene);
+  base.position.y=.3; base.parent=root; base.material=fmat(P.stone); shadowGen.addShadowCaster(base);
+  const barrel=BABYLON.MeshBuilder.CreateCylinder("tbar",{height:.6,diameter:.2,tessellation:6},scene);
+  barrel.position=V3(0,.7,.3); barrel.rotation.x=Math.PI/2; barrel.parent=root;
+  barrel.material=fmat(P.timber);
+  const top=BABYLON.MeshBuilder.CreateSphere("tt",{diameter:.5,segments:8},scene);
+  top.position.y=.8; top.parent=root; top.material=fmat(P.stoneDk);
+  root._bob=Math.random()*Math.PI*2; root._cd=0;
+  turrets.push(root);
+}
+
+// ─── POWER-UPS ───
+function spawnPowerUp() {
+  const types = ["double","pie","smoothie","heal","shards"];
+  const type = types[(Math.random()*types.length)|0];
+  const x=(Math.random()-.5)*GS*.4, z=(Math.random()-.5)*GS*.4;
+  const root = new BABYLON.TransformNode("pu"+Math.random(), scene);
+  root.position = V3(x,0,z);
+  const icons = {double:C3(.4,.2,.8), pie:C3(.8,.5,.1), smoothie:C3(.2,.7,.4), heal:C3(.9,.2,.2), shards:C3(.92,.55,.70)};
+  const orb=BABYLON.MeshBuilder.CreateSphere("po",{diameter:.7,segments:10},scene);
+  orb.position.y=.8; orb.parent=root; orb.material=mat(icons[type]||C3(1,1,0),scene,{em:(icons[type]||C3(1,1,0)).scale(.6)});
+  const ring=BABYLON.MeshBuilder.CreateTorus("pr",{diameter:1.2,thickness:.04,tessellation:24},scene);
+  ring.position.y=.05; ring.parent=root; ring.material=mat(C3(1,1,.5),scene,{em:C3(.5,.5,.2)});
+  ring.material.disableLighting=true;
+  root._type=type; root._bob=Math.random()*Math.PI*2; root._life=20;
+  powerUps.push(root);
+}
+
+// ─── VOXEL EXPLOSION ───
+const hagVoxColors = [C3(.32,.25,.20),C3(.22,.30,.18),C3(.40,.30,.22),C3(.28,.20,.15),C3(.75,.90,.20),C3(.45,.35,.22)];
+function explodeHag(pos) {
+  const center=pos.clone(); center.y+=1.3;
+  const count=35+Math.random()*15|0;
+  for(let i=0;i<count;i++){
+    const sz=.15+Math.random()*.25;
+    const vox=BABYLON.MeshBuilder.CreateBox("vx",{size:sz},scene);
+    vox.position=V3(center.x+(Math.random()-.5)*1.2, center.y+(Math.random()-.5)*2.5, center.z+(Math.random()-.5)*1.2);
+    vox.material=mat(hagVoxColors[(Math.random()*hagVoxColors.length)|0],scene);
+    const d=vox.position.subtract(center).normalize();
+    const pw=4+Math.random()*8;
+    voxelChunks.push({
+      mesh:vox,
+      vel:V3(d.x*pw+(Math.random()-.5)*3, Math.random()*8+3, d.z*pw+(Math.random()-.5)*3),
+      rv:V3((Math.random()-.5)*15,(Math.random()-.5)*15,(Math.random()-.5)*15),
+      life:1.5+Math.random(), max:1.5+Math.random(), sz
+    });
+  }
+}
+
+// ─── SPAWN ───
+function spawnPlayer() { player=createSnoodle("player",C3(.48,.68,.82),true); player.position=V3(0,0,4); }
+function spawnNPCs(n) {
+  const cols=[C3(.85,.55,.55),C3(.55,.75,.48),C3(.90,.78,.35),C3(.58,.52,.78),C3(.90,.60,.38)];
+  for(let i=0;i<n;i++){
+    const s=createSnoodle("npc"+i,cols[i%5],false);
+    s.position=V3((Math.random()-.5)*14,0,(Math.random()-.5)*14);
+    s._wt=null; s._wTimer=0;
+    s._npcState="idle"; s._buildTarget=-1; s._carryingWood=false; s._buildTimer=0;
+    snoodleNPCs.push(s);
+  }
+}
+function spawnHag() {
+  if(!S.active) return;
+  const a=Math.random()*Math.PI*2;
+  const h=createHag();
+  h.position=V3(Math.cos(a)*GS*.7,0,Math.sin(a)*GS*.7);
+  hags.push(h); S.hagsSpawned++;
+}
+
+// ─── WEAPONS ───
+function fireWeapon() {
+  const w=WEAPONS[S.curWeapon];
+  if(!w.unlocked()) return;
+  S.cooldown = w.cd * S.fireRateMult;
+  S.fired++;
+
+  const start=player.position.clone(); start.y=1;
+  const target=mouseGround.clone(); target.y=1;
+  const dir=target.subtract(start); dir.y=0;
+  if(dir.length()<.1) return;
+  dir.normalize();
+  player.rotation.y=Math.atan2(dir.x,dir.z);
+
+  if(w.type==="single") fireBerry(start,dir,S.berryDmg);
+  else if(w.type==="double") {
+    const right=V3(dir.z,0,-dir.x);
+    fireBerry(start.add(right.scale(.2)), dir, S.berryDmg);
+    fireBerry(start.subtract(right.scale(.2)), dir, S.berryDmg);
+    S.fired++;
+  }
+  else if(w.type==="pie") firePie(start,dir, w.dmg+S.berryDmg-1);
+  else if(w.type==="smoothie") fireSmoothie(start,dir, w.dmg+S.berryDmg-1);
+
+  // Recoil
+  player.scaling.x=1.12; player.scaling.z=.88;
+  setTimeout(()=>{try{player.scaling.x=1;player.scaling.z=1}catch(e){}},100);
+}
+
+function fireBerry(start,dir,dmg) {
+  const berry=BABYLON.MeshBuilder.CreateSphere("br",{diameter:.4,segments:8},scene);
+  berry.position=start.clone();
+  const bc=[C3(.45,.15,.55),C3(.35,.10,.45),C3(.52,.18,.48)];
+  const col=bc[(Math.random()*3)|0];
+  berry.material=fmat(col,{em:col.scale(.4)});
+
+  const trail=new BABYLON.ParticleSystem("bt",15,scene);
+  trail.emitter=berry; trail.createPointEmitter(V3(-.1,-.1,-.1),V3(.1,.1,.1));
+  trail.minSize=.05;trail.maxSize=.15;trail.minLifeTime=.1;trail.maxLifeTime=.25;trail.emitRate=40;
+  trail.color1=new BABYLON.Color4(.6,.1,.8,.8);trail.color2=new BABYLON.Color4(.9,.3,1,.6);
+  trail.colorDead=new BABYLON.Color4(.3,0,.4,0);trail.minEmitPower=.2;trail.maxEmitPower=.5;
+  trail.gravity=V3(0,-1,0);trail.start();
+
+  berries.push({mesh:berry,trail,dir:dir.clone(),dist:0,dmg,type:"berry",speed:.5});
+}
+
+function firePie(start,dir,dmg) {
+  const pie=BABYLON.MeshBuilder.CreateCylinder("pie",{height:.2,diameter:.7,tessellation:10},scene);
+  pie.position=start.clone();
+  pie.material=fmat(C3(.82,.62,.28),{em:C3(.2,.15,.04)});
+
+  const trail=new BABYLON.ParticleSystem("pt",10,scene);
+  trail.emitter=pie; trail.createPointEmitter(V3(-.1,0,-.1),V3(.1,.2,.1));
+  trail.minSize=.04;trail.maxSize=.12;trail.minLifeTime=.1;trail.maxLifeTime=.2;trail.emitRate=25;
+  trail.color1=new BABYLON.Color4(.9,.7,.3,.7);trail.color2=new BABYLON.Color4(.8,.5,.1,.5);
+  trail.colorDead=new BABYLON.Color4(.4,.2,0,0);trail.minEmitPower=.1;trail.maxEmitPower=.3;
+  trail.gravity=V3(0,-2,0);trail.start();
+
+  berries.push({mesh:pie,trail,dir:dir.clone(),dist:0,dmg,type:"pie",speed:.35,radius:3.5});
+}
+
+function fireSmoothie(start,dir,dmg) {
+  const sm=BABYLON.MeshBuilder.CreateSphere("sm",{diameter:.5,segments:8},scene);
+  sm.position=start.clone();
+  sm.material=fmat(C3(.25,.62,.38),{em:C3(.08,.3,.15)});
+
+  const trail=new BABYLON.ParticleSystem("st",12,scene);
+  trail.emitter=sm; trail.createPointEmitter(V3(-.1,-.1,-.1),V3(.1,.1,.1));
+  trail.minSize=.04;trail.maxSize=.1;trail.minLifeTime=.1;trail.maxLifeTime=.2;trail.emitRate=30;
+  trail.color1=new BABYLON.Color4(.2,.8,.4,.7);trail.color2=new BABYLON.Color4(.1,.6,.3,.5);
+  trail.colorDead=new BABYLON.Color4(0,.3,.1,0);trail.minEmitPower=.2;trail.maxEmitPower=.4;
+  trail.gravity=V3(0,-1,0);trail.start();
+
+  berries.push({mesh:sm,trail,dir:dir.clone(),dist:0,dmg,type:"smoothie",speed:.3,radius:4.5});
+}
+
+function splashDamage(pos, dmg, radius, color) {
+  // Visual
+  const ps=new BABYLON.ParticleSystem("sp",50,scene);
+  ps.emitter=pos.clone(); ps.createPointEmitter(V3(-2,1,-2),V3(2,3,2));
+  ps.minSize=.1;ps.maxSize=.35;ps.minLifeTime=.3;ps.maxLifeTime=.8;ps.emitRate=150;
+  ps.color1=new BABYLON.Color4(color.r,color.g,color.b,1);
+  ps.color2=new BABYLON.Color4(color.r*.7,color.g*.7,color.b*.7,.8);
+  ps.colorDead=new BABYLON.Color4(0,0,0,0);ps.minEmitPower=3;ps.maxEmitPower=8;
+  ps.gravity=V3(0,-12,0);ps.targetStopDuration=.15;ps.disposeOnStop=true;ps.start();
+
+  // Ring visual
+  const ring=BABYLON.MeshBuilder.CreateTorus("sr",{diameter:radius*2,thickness:.1,tessellation:32},scene);
+  ring.position=pos.clone(); ring.position.y=.1;
+  ring.material=mat(color,scene,{em:color.scale(.5),a:.6}); ring.material.disableLighting=true;
+  let life=.5;
+  const obs=scene.onBeforeRenderObservable.add(()=>{
+    life-=engine.getDeltaTime()/1000;
+    ring.scaling.setAll(1+(1-life/.5)*.5);
+    ring.material.alpha=life/.5*.6;
+    if(life<=0){ring.dispose();scene.onBeforeRenderObservable.remove(obs);}
+  });
+
+  // Damage hags in radius
+  for(let j=hags.length-1;j>=0;j--){
+    const h=hags[j];
+    const d=BABYLON.Vector3.Distance(pos,h.position.add(V3(0,1.3,0)));
+    if(d<radius) damageHag(h,j,dmg);
+  }
+  // Damage trees in radius
+  trees.forEach(t=>{
+    if(!t._alive) return;
+    const d=BABYLON.Vector3.Distance(pos,t.position);
+    if(d<radius) damageTree(t,dmg);
+  });
+}
+
+function damageHag(hag, idx, dmg) {
+  hag._hp -= dmg;
+  screenShake = hag._hp<=0 ? 1.8 : .5;
+  if(hag._hp<=0) {
+    S.score+=100; S.kills++;
+    explodeHag(hag.position);
+    // Drop cupcakes
+    const shardCount = 1+Math.floor(Math.random()*3);
+    for(let i=0;i<shardCount;i++) createShard(hag.position.add(V3((Math.random()-.5)*2,0,(Math.random()-.5)*2)));
+    // Drop food if carrying — restore the original food item at hag position
+    if(hag._target && hag._target._collected) {
+      const food = hag._target;
+      food._collected = false;
+      food.position = hag.position.clone();
+      food.position.y = 0;
+      food.getChildMeshes().forEach(m => m.setEnabled(true));
+      S.food++;
+      updateHUD();
+      hag._target = null;
+    }
+    hag.dispose(); hags.splice(idx,1);
+    showMsg("SPLAT! +100 ⭐");
+  } else {
+    S.score+=25;
+    hag._state="stunned"; hag._grabTimer=.3;
+    hag.scaling.setAll(1.2);
+    setTimeout(()=>{try{hag.scaling.setAll(1)}catch(e){}},100);
+    if(hag._hpBar){
+      const p=hag._hp/hag._maxHp;
+      hag._hpBar.scaling.x=p;
+    }
+    const bm=hag.getChildMeshes()[0];
+    if(bm){const p=hag._hp/hag._maxHp; bm.material.emissiveColor=C3(.5*(1-p),0,.3*(1-p));}
+    showMsg(`Hit! ${hag._hp} left`);
+  }
+  updateHUD();
+}
+
+function damageTree(tree, dmg) {
+  if(!tree._alive) return;
+  tree._hp -= dmg;
+  tree.position.x += (Math.random()-.5)*.2;
+  tree.position.z += (Math.random()-.5)*.2;
+  if(tree._hp<=0) {
+    tree._alive = false;
+    // Drop 2 physical wood pickups
+    for(let i=0;i<2;i++) {
+      createWoodPickup(tree.position.add(V3((Math.random()-.5)*2, 0, (Math.random()-.5)*2)));
+    }
+    showMsg(`🪵 Tree felled! (it'll grow back)`);
+    // Remove canopy, leave stump
+    const children = tree.getChildMeshes();
+    children.forEach((m,i) => { if(i>0) m.dispose(); });
+    if(children[0]) { children[0].scaling.y=.3; children[0].position.y=.15; }
+  }
+}
+
+// ─── HUD ───
+function updateHUD() {
+  document.getElementById('h-food').textContent=S.food;
+  document.getElementById('h-wave').textContent=S.wave;
+  document.getElementById('h-shards').textContent=S.shards;
+  const minLvl = Math.min(...fenceSlotLevel);
+  const targetLvl = minLvl + 1;
+  const builtAtTarget = fenceSlotLevel.filter(l => l >= targetLvl).length;
+  document.getElementById('h-fence').textContent = `L${targetLvl}: ${builtAtTarget}/${FENCE_TOTAL}`;
+  document.getElementById('h-wood').textContent = S.wood;
+  document.getElementById('h-stockpile').textContent = S.woodStockpile;
+  document.getElementById('h-score').textContent=S.score;
+  document.getElementById('h-kills').textContent=S.kills;
+  document.getElementById('h-fired').textContent=S.fired;
+  const p=S.food/S.maxFood;
+  const bar=document.getElementById('food-bar');
+  bar.style.width=(p*100)+'%';
+  bar.style.background = p>.5?'linear-gradient(90deg,#4caf50,#8bc34a)' : p>.25?'linear-gradient(90deg,#ff9800,#ffc107)':'linear-gradient(90deg,#f44336,#ff5722)';
+
+  // Weapon bar
+  WEAPONS.forEach((w,i) => {
+    const el=document.getElementById('ws-'+i);
+    el.className='weapon-slot'+(i===S.curWeapon?' active':'')+(w.unlocked()?'':' locked');
+  });
+}
+
+function showMsg(t,d=2000) {
+  const el=document.getElementById('msg'); el.textContent=t; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),d);
+}
+function showTut(id) {
+  document.querySelectorAll('.tut-msg').forEach(e=>e.classList.remove('active'));
+  const el=document.getElementById(id); if(el) el.classList.add('active');
+  setTimeout(()=>{if(el)el.classList.remove('active')},6000);
+}
+
+// ─── SHOP ───
+function buildShop() {
+  const grid=document.getElementById('shop-grid');
+  grid.innerHTML='';
+  SHOP.forEach(item => {
+    const div=document.createElement('div');
+    div.className='shop-item';
+    const canBuy = item.repeatable ? true : (item.check ? item.check() : true);
+    if(!canBuy) div.classList.add('bought');
+    else if(S.shards<item.cost) div.classList.add('too-expensive');
+    div.innerHTML=`<div class="si-icon">${item.icon}</div><div class="si-name">${item.name}</div><div class="si-desc">${item.desc}</div><div class="si-cost">🧁 ${item.cost}</div>`;
+    div.addEventListener('click', () => {
+      if(!canBuy || S.shards<item.cost) return;
+      S.shards -= item.cost;
+      item.apply();
+      updateHUD(); buildShop();
+    });
+    grid.appendChild(div);
+  });
+  document.getElementById('shop-stats').innerHTML =
+    `🧁 ${S.shards} Cupcakes · 💪 ${S.berryDmg} BP · ⚡ ${Math.round(1/S.fireRateMult*100)}% Rate · 🗼 ${S.turretCount-S.turretPlaced} turrets to place`;
+}
+
+function togglePause() {
+  S.paused = !S.paused;
+  const el=document.getElementById('pause-screen');
+  if(S.paused) { el.classList.add('show'); buildShop(); document.getElementById('crosshair').style.display='none'; }
+  else { el.classList.remove('show'); document.getElementById('crosshair').style.display='block'; }
+}
+
+// ─── GAME LOOP ───
+function gameLoop() {
+  if(!S.active || S.paused) return;
+  const dt = engine.getDeltaTime()/1000;
+  const time = performance.now()/1000;
+
+  // Player movement
+  let mv=V3(0,0,0);
+  if(keys['w']) mv.z+=1; if(keys['s']) mv.z-=1;
+  if(keys['a']) mv.x-=1; if(keys['d']) mv.x+=1;
+  if(keys['arrowup']) mv.z-=1; if(keys['arrowdown']) mv.z+=1;
+  if(keys['arrowleft']) mv.x+=1; if(keys['arrowright']) mv.x-=1;
+  if(mv.length()>0) { mv.normalize().scaleInPlace(.15); player.position.addInPlace(mv); player.rotation.y=Math.atan2(mv.x,mv.z); }
+  player.position.x=Math.max(-GS*.8,Math.min(GS*.8,player.position.x));
+  player.position.z=Math.max(-GS*.8,Math.min(GS*.8,player.position.z));
+
+  camera.target=BABYLON.Vector3.Lerp(camera.target,player.position,.06);
+  if(screenShake>0){screenShake-=dt*8;camera.target.x+=(Math.random()-.5)*screenShake*.3;camera.target.z+=(Math.random()-.5)*screenShake*.3;}
+  player._bob+=dt*5;
+  if(player._arrow) player._arrow.position.y=2+Math.sin(player._bob*2)*.15;
+
+  if(S.cooldown>0) S.cooldown-=dt;
+
+  // Collect cupcakes
+  for(let i=shardItems.length-1;i>=0;i--){
+    const s=shardItems[i]; s._bob+=dt*4; s._life-=dt;
+    s.position.y=.3+Math.sin(s._bob)*.15;
+    s.getChildMeshes().forEach(m=>m.rotation.y+=dt*3);
+    if(BABYLON.Vector3.Distance(player.position,s.position)<2){
+      S.shards+=1; s.dispose(); shardItems.splice(i,1); updateHUD(); continue;
+    }
+    if(s._life<=0){s.dispose();shardItems.splice(i,1);}
+  }
+
+  // Collect dropped food
+  for(let i=droppedFoods.length-1;i>=0;i--){
+    const df=droppedFoods[i]; df._bob+=dt*4; df._life-=dt;
+    if(df._ring) df._ring.rotation.y+=dt*2;
+    if(BABYLON.Vector3.Distance(player.position,df.position)<2){
+      S.food++; S.score+=25; df.dispose(); droppedFoods.splice(i,1);
+      showMsg("🍎 Food recovered!"); updateHUD(); continue;
+    }
+    if(df._life<=0){
+      // Food lost permanently
+      df.dispose(); droppedFoods.splice(i,1);
+    }
+  }
+
+  // Collect power-ups
+  for(let i=powerUps.length-1;i>=0;i--){
+    const pu=powerUps[i]; pu._bob+=dt*4; pu._life-=dt;
+    pu.getChildMeshes()[0].position.y=.8+Math.sin(pu._bob)*.15;
+    pu.getChildMeshes()[0].rotation.y+=dt*2;
+    if(BABYLON.Vector3.Distance(player.position,pu.position)<2){
+      applyPowerUp(pu._type); pu.dispose(); powerUps.splice(i,1); continue;
+    }
+    if(pu._life<=0){pu.dispose();powerUps.splice(i,1);}
+  }
+
+  // Collect wood pickups
+  for(let i=woodItems.length-1;i>=0;i--){
+    const w=woodItems[i]; w._bob+=dt*3; w._life-=dt;
+    w.position.y=Math.sin(w._bob)*.05;
+    if(BABYLON.Vector3.Distance(player.position,w.position)<2){
+      S.wood++; w.dispose(); woodItems.splice(i,1); updateHUD();
+      showMsg("🪵 +1 Wood  (F at well to deposit)");
+      continue;
+    }
+    if(w._life<=0){w.dispose();woodItems.splice(i,1);}
+  }
+
+  // Deposit wood at well (F key near center)
+  if(keys['f'] && S.wood > 0) {
+    keys['f'] = false;
+    const distToWell = Math.hypot(player.position.x, player.position.z);
+    if(distToWell < 4) {
+      const amt = S.wood;
+      S.woodStockpile += amt;
+      S.wood = 0;
+      updateHUD();
+      showMsg(`🪵 Deposited ${amt} wood at well! (${S.woodStockpile} stockpiled)`);
+    } else {
+      showMsg("🪵 Walk to the well to deposit wood!");
+    }
+  }
+
+  // Place turret (T key)
+  if(keys['t'] && S.turretCount>S.turretPlaced) {
+    keys['t']=false;
+    S.turretPlaced++;
+    createTurret(player.position.clone());
+    showMsg("🗼 Turret placed!");
+  }
+
+  // Projectiles
+  for(let i=berries.length-1;i>=0;i--){
+    const b=berries[i];
+    b.mesh.position.addInPlace(b.dir.scale(b.speed));
+    b.dist+=b.speed;
+    b.mesh.rotation.x+=dt*15; b.mesh.rotation.z+=dt*10;
+
+    let hit=false;
+
+    if(b.type==="berry") {
+      // Hit hags
+      for(let j=hags.length-1;j>=0;j--){
+        const h=hags[j];
+        if(BABYLON.Vector3.Distance(b.mesh.position,h.position.add(V3(0,1.3,0)))<1.8){
+          hit=true; damageHag(h,j,b.dmg); break;
+        }
+      }
+      // Hit trees
+      if(!hit) trees.forEach(t=>{
+        if(!t._alive) return;
+        if(BABYLON.Vector3.Distance(b.mesh.position,t.position)<1.5){hit=true;damageTree(t,b.dmg);}
+      });
+    }
+    else if(b.type==="pie"||b.type==="smoothie") {
+      // Check if reached target area (traveled enough) or hit ground
+      let hitGround = b.dist > BABYLON.Vector3.Distance(player.position,mouseGround)*1.1 || b.dist>30;
+      // Also check direct hag hit
+      for(let j=hags.length-1;j>=0;j--){
+        if(BABYLON.Vector3.Distance(b.mesh.position,hags[j].position.add(V3(0,1.3,0)))<1.5){hitGround=true;break;}
+      }
+      if(hitGround) {
+        hit=true;
+        const col = b.type==="pie" ? C3(.85,.65,.3) : C3(.2,.7,.4);
+        splashDamage(b.mesh.position, b.dmg, b.radius, col);
+        screenShake=1;
+      }
+    }
+
+    if(hit||b.dist>40){
+      b.trail.stop(); setTimeout(()=>{try{b.trail.dispose()}catch(e){}},500);
+      b.mesh.dispose(); berries.splice(i,1);
+    }
+  }
+
+  // Voxel chunks
+  for(let i=voxelChunks.length-1;i>=0;i--){
+    const v=voxelChunks[i]; v.life-=dt;
+    v.vel.y-=22*dt;
+    v.mesh.position.addInPlace(v.vel.scale(dt));
+    v.mesh.rotation.addInPlace(v.rv.scale(dt));
+    if(v.mesh.position.y<v.sz/2){v.mesh.position.y=v.sz/2;v.vel.y=Math.abs(v.vel.y)*.35;v.vel.x*=.7;v.vel.z*=.7;v.rv.scaleInPlace(.6);}
+    const lp=v.life/v.max; if(lp<.3) v.mesh.scaling.setAll(v.sz*(lp/.3));
+    if(v.life<=0){v.mesh.dispose();voxelChunks.splice(i,1);}
+  }
+
+  // Food glow
+  foodItems.forEach(f=>{if(f._collected)return; f._bob+=dt*3;
+    if(f._glow){f._glow.scaling.x=1+Math.sin(f._bob*2)*.08;f._glow.scaling.z=1+Math.sin(f._bob*2)*.08;f._glow.rotation.y+=dt*.5;}
+  });
+
+  // Turrets
+  turrets.forEach(t=>{
+    t._bob+=dt*3; t._cd-=dt;
+    if(t._cd>0) return;
+    let nearest=null,nd=Infinity;
+    hags.forEach(h=>{const d=BABYLON.Vector3.Distance(t.position,h.position);if(d<nd){nd=d;nearest=h;}});
+    if(nearest&&nd<18){
+      t._cd=1.5*S.fireRateMult;
+      const dir=nearest.position.subtract(t.position); dir.y=0; dir.normalize();
+      fireBerry(t.position.clone().add(V3(0,1,0)),dir,S.berryDmg);
+      // Rotate turret toward target
+      t.getChildMeshes().forEach(m=>m.rotation&&(m.rotation.y=Math.atan2(dir.x,dir.z)));
+    }
+  });
+
+  // Hag AI
+  const hagSpd = .05+(S.wave-1)*.006;
+  for(let j=hags.length-1;j>=0;j--){
+    const h=hags[j]; h._bob+=dt*4;
+    const showEx=h._state==="seeking"||h._state==="grabbing";
+    if(h._ex){h._ex.setEnabled(showEx);h._exd.setEnabled(showEx);
+      if(showEx){h._ex.position.y=3.4+Math.sin(h._bob*3)*.1;h._exd.position.y=3.05+Math.sin(h._bob*3)*.1;}}
+
+    if(h._state==="stunned"){
+      h._grabTimer-=dt;
+      h.rotation.z=Math.sin(h._bob*4)*.4; h.position.y=Math.abs(Math.sin(h._bob*2))*.08;
+      if(h._grabTimer<=0){h._state="seeking";h.rotation.z=0;h.position.y=0;}
+      continue;
+    }
+
+    h.position.y=Math.sin(h._bob)*.04;
+
+    if(h._state==="seeking"){
+      // Find nearest uncollected food
+      let nearest=null,nd=Infinity;
+      foodItems.forEach(f=>{if(f._collected)return;
+        const d=BABYLON.Vector3.Distance(h.position,f.position);if(d<nd){nd=d;nearest=f;}});
+
+      if(!nearest) {
+        // No food left at all — wander toward center then flee if close
+        const toCtr = V3(0,0,0).subtract(h.position); toCtr.y=0;
+        if(toCtr.length()>5) {
+          toCtr.normalize().scaleInPlace(hagSpd);
+          h.position.addInPlace(toCtr);
+          h.rotation.y=Math.atan2(toCtr.x,toCtr.z);
+        } else {
+          h._state="fleeing";
+        }
+        continue;
+      }
+
+      h._target=nearest;
+      const dir=nearest.position.subtract(h.position); dir.y=0;
+      if(dir.length()>.01){dir.normalize().scaleInPlace(hagSpd);h.position.addInPlace(dir);h.rotation.y=Math.atan2(dir.x,dir.z);}
+
+      // Only check fence collision when actually moving through the ring
+      // Hags seek gaps first, then weakest fence segment
+      let blockedFence=null;
+      const hagDistFromCenter = Math.sqrt(h.position.x*h.position.x + h.position.z*h.position.z);
+
+      // If approaching the ring, pick entry strategy
+      if(hagDistFromCenter > CAMP_RADIUS-1 && hagDistFromCenter < CAMP_RADIUS+5 && !h._chosenEntry) {
+        const gap = findGapInFence(h.position);
+        if(gap >= 0) {
+          // There's a gap, steer toward it
+          h._chosenEntry = gap;
+          h._entryIsGap = true;
+        } else {
+          // No gap, find weakest fence
+          const weak = findWeakestFenceSlot(h.position);
+          if(weak >= 0) { h._chosenEntry = weak; h._entryIsGap = false; }
+        }
+      }
+
+      // Steer toward chosen entry point
+      if(h._chosenEntry !== undefined && h._chosenEntry >= 0 && hagDistFromCenter > CAMP_RADIUS - 2) {
+        const ep = getFenceSlotPos(h._chosenEntry);
+        const toEntry = V3(ep.x, 0, ep.z).subtract(h.position); toEntry.y = 0;
+        if(toEntry.length() > 1.5) {
+          toEntry.normalize().scaleInPlace(hagSpd);
+          h.position.addInPlace(toEntry);
+          h.rotation.y = Math.atan2(toEntry.x, toEntry.z);
+        }
+      }
+
+      if(hagDistFromCenter > CAMP_RADIUS-3 && hagDistFromCenter < CAMP_RADIUS+3) {
+        fences.forEach(f=>{
+          if(f._hp<=0) return;
+          if(BABYLON.Vector3.Distance(h.position,f.position)<2.5) blockedFence=f;
+        });
+      }
+
+      if(blockedFence && blockedFence._hp>0){
+        h._state="ramming"; h._rammingFence=blockedFence; h._ramTimer=0;
+        continue;
+      }
+
+      if(nd<1.2){h._state="grabbing";h._grabTimer=1.5;}
+    }
+
+    if(h._state==="ramming"){
+      const f=h._rammingFence;
+      if(!f||f._hp<=0){h._state="seeking";h._rammingFence=null;h._chosenEntry=undefined;continue;}
+      
+      // Move toward fence if not close enough
+      const toFence = f.position.subtract(h.position); toFence.y=0;
+      const fenceDist = toFence.length();
+      if(fenceDist > 1.2) {
+        toFence.normalize().scaleInPlace(hagSpd);
+        h.position.addInPlace(toFence);
+      }
+      h.rotation.y=Math.atan2(toFence.x,toFence.z);
+
+      h._ramTimer+=dt;
+      // Ram every 1.2s
+      if(h._ramTimer>=1.2 && fenceDist < 2){
+        h._ramTimer=0; f._hp-=2;
+        screenShake=.3;
+        // Lunge animation
+        h.scaling.z=1.3; setTimeout(()=>{try{h.scaling.z=1}catch(e){}},150);
+        if(f._hp<=0){
+          if(f._slotIdx!==undefined) fenceSlotLevel[f._slotIdx] = 0;
+          f.dispose();fences=fences.filter(ff=>ff!==f);
+          h._state="seeking";h._rammingFence=null;h._chosenEntry=undefined;
+          updateFenceGuide(); updateHUD();
+          showMsg("🧱 Fence destroyed!");
+        }
+      }
+    }
+
+    if(h._state==="grabbing"){
+      h._grabTimer-=dt; h.scaling.y=1+Math.sin(h._grabTimer*12)*.04;
+      if(h._grabTimer<=0){
+        if(h._target&&!h._target._collected){
+          h._target._collected=true; h._target.getChildMeshes().forEach(m=>m.setEnabled(false));
+          S.food--; updateHUD(); h._state="fleeing"; screenShake=.5;
+          showMsg("Food stolen! 😱");
+          if(S.food<=0) endGame();
+        } else h._state="seeking";
+        h.scaling.y=1;
+      }
+    }
+
+    if(h._state==="fleeing"){
+      const dir=h.position.clone();dir.y=0;
+      if(dir.length()>.01){dir.normalize().scaleInPlace(hagSpd*1.5);h.position.addInPlace(dir);h.rotation.y=Math.atan2(dir.x,dir.z);}
+      if(h.position.length()>GS*.85){h.dispose();hags.splice(j,1);}
+    }
+  }
+
+  // NPCs - Builder AI
+  snoodleNPCs.forEach(s => {
+    s._bob += dt*4;
+    const bm = s.getChildMeshes()[0]; if(bm) bm.position.y = .8+Math.sin(s._bob)*.06;
+
+    // Flee from nearby hags (override everything)
+    let nearH=null, hd=Infinity;
+    hags.forEach(h => { if(h._state==="stunned") return; const d=BABYLON.Vector3.Distance(s.position,h.position); if(d<hd){hd=d;nearH=h;} });
+    if(nearH && hd < 6) {
+      const fl = s.position.subtract(nearH.position); fl.y=0;
+      if(fl.length()>.01) { fl.normalize().scaleInPlace(.08); s.position.addInPlace(fl); s.rotation.y=Math.atan2(fl.x,fl.z); }
+      s._npcState = "fleeing";
+      s._buildTarget = -1;
+      s._carryingWood = false;
+    } else if(!s._npcState || s._npcState === "fleeing") {
+      s._npcState = "idle";
+    }
+
+    if(s._npcState === "idle") {
+      // Check if there's wood in stockpile and slots to build
+      const slot = findBuildableSlot(s.position);
+      if(S.woodStockpile > 0 && slot >= 0) {
+        s._npcState = "goToWell";
+      } else {
+        // Wander
+        s._wTimer -= dt;
+        if(s._wTimer <= 0 || !s._wt) { s._wt = V3((Math.random()-.5)*14, 0, (Math.random()-.5)*14); s._wTimer = 3+Math.random()*4; }
+        const dir = s._wt.subtract(s.position); dir.y=0;
+        if(dir.length() > .5) { dir.normalize().scaleInPlace(.03); s.position.addInPlace(dir); s.rotation.y=Math.atan2(dir.x,dir.z); }
+      }
+    }
+
+    if(s._npcState === "goToWell") {
+      // Walk to well center
+      const toWell = V3(0,0,0).subtract(s.position); toWell.y=0;
+      if(toWell.length() > 2) {
+        toWell.normalize().scaleInPlace(.07);
+        s.position.addInPlace(toWell);
+        s.rotation.y = Math.atan2(toWell.x, toWell.z);
+      } else {
+        // At well - pick up wood
+        if(S.woodStockpile > 0) {
+          S.woodStockpile--;
+          s._carryingWood = true;
+          // Pick a slot to build
+          const slot = findBuildableSlot(s.position);
+          if(slot >= 0) {
+            s._buildTarget = slot;
+            s._npcState = "goToBuild";
+          } else {
+            // No slot available, put wood back
+            S.woodStockpile++;
+            s._carryingWood = false;
+            s._npcState = "idle";
+          }
+          updateHUD();
+        } else {
+          s._npcState = "idle";
+        }
+      }
+    }
+
+    if(s._npcState === "goToBuild") {
+      const slot = s._buildTarget;
+      if(slot < 0 || !s._carryingWood) { s._npcState = "idle"; }
+      else {
+        const p = getFenceSlotPos(slot);
+        const toSlot = V3(p.x, 0, p.z).subtract(s.position); toSlot.y=0;
+        if(toSlot.length() > 1.5) {
+          toSlot.normalize().scaleInPlace(.06);
+          s.position.addInPlace(toSlot);
+          s.rotation.y = Math.atan2(toSlot.x, toSlot.z);
+        } else {
+          // At slot - build!
+          s._npcState = "building";
+          s._buildTimer = 2.5; // build time
+        }
+      }
+    }
+
+    if(s._npcState === "building") {
+      s._buildTimer -= dt;
+      // Hammering animation
+      s.scaling.y = 1 + Math.sin(s._buildTimer*12)*.03;
+      if(s._buildTimer <= 0) {
+        s.scaling.y = 1;
+        s._carryingWood = false;
+        const slot = s._buildTarget;
+        const targetLevel = getFenceTargetLevel();
+        if(slot >= 0 && fenceSlotLevel[slot] < targetLevel) {
+          buildFenceAtSlot(slot);
+          const builtAtTarget = fenceSlotLevel.filter(l => l >= targetLevel).length;
+          if(builtAtTarget >= FENCE_TOTAL) {
+            showMsg(`🧱 Fence Level ${targetLevel} complete!`, 3000);
+          }
+          updateHUD();
+        }
+        s._buildTarget = -1;
+        s._npcState = "idle";
+      }
+    }
+
+    // Show wood carry visual (simple bob of a brown dot above head)
+    if(!s._woodIndicator) {
+      const wi = BABYLON.MeshBuilder.CreateBox(s.name+"wi", {size:.25}, scene);
+      wi.parent = s; wi.position = V3(0, 1.8, 0);
+      wi.material = fmat(P.trunk);
+      wi.setEnabled(false);
+      s._woodIndicator = wi;
+    }
+    s._woodIndicator.setEnabled(!!s._carryingWood);
+
+    s.position.x = Math.max(-GS*.5, Math.min(GS*.5, s.position.x));
+    s.position.z = Math.max(-GS*.5, Math.min(GS*.5, s.position.z));
+  });
+
+  // Fence visual HP
+  fences.forEach(f=>{
+    const p=f._hp/f._maxHp;
+    f.getChildMeshes().forEach(m=>{m.material.emissiveColor=C3(.3*(1-p),.05*(1-p),0);});
+  });
+
+  // Tree regrowth
+  trees.forEach(t => {
+    if(!t._alive) {
+      if(!t._regrowTimer) t._regrowTimer = 45 + Math.random()*15; // 45-60 seconds
+      t._regrowTimer -= dt;
+      if(t._regrowTimer <= 0) {
+        t._alive = true;
+        t._hp = t._maxHp;
+        t._regrowTimer = null;
+        // Rebuild canopy
+        const foliColors = [P.foli1, P.foli2, P.foli3];
+        const sc = t._scale;
+        // Fix trunk
+        const children = t.getChildMeshes();
+        if(children[0]) { children[0].scaling.y = 1; children[0].position.y = sc; }
+        // Add foliage back
+        const clusters = 2 + Math.floor(Math.random()*2);
+        for(let i=0;i<clusters;i++) {
+          const sz = (1.2 + Math.random()*0.8) * sc;
+          const fol = BABYLON.MeshBuilder.CreateSphere("fol"+Math.random(), {diameter:sz, segments:8}, scene);
+          fol.position = V3((Math.random()-0.5)*0.6*sc, sc*1.8 + i*0.4*sc, (Math.random()-0.5)*0.6*sc);
+          fol.scaling.y = 0.7 + Math.random()*0.2;
+          fol.parent = t;
+          fol.material = fmat(foliColors[i % 3]);
+          shadowGen.addShadowCaster(fol);
+          // Pop-in animation
+          fol.scaling.setAll(0.01);
+          const finalY = fol.scaling.y;
+          fol._growAnim = scene.onBeforeRenderObservable.add(() => {
+            if(fol.scaling.x < 1) { fol.scaling.x += dt*2; fol.scaling.z += dt*2; fol.scaling.y = Math.min(finalY, fol.scaling.y + dt*2); }
+            else { scene.onBeforeRenderObservable.remove(fol._growAnim); }
+          });
+        }
+      }
+    }
+  });
+
+  // Waves
+  hags=hags.filter(h=>!h.isDisposed());
+
+  if(S.waveState==="waiting"){
+    S.waveState="cooldown"; S.waveCdTimer = 8; // first wave: 8 seconds to explore
+    showTut('t-move');
+  }
+  if(S.waveState==="cooldown"){
+    S.waveCdTimer-=dt;
+    // Show countdown
+    const t = Math.ceil(S.waveCdTimer);
+    if(t > 0 && t <= 5) {
+      const el = document.getElementById('msg');
+      el.textContent = `Next wave in ${t}...`;
+      el.classList.add('show');
+    }
+    if(S.waveCdTimer<=0){
+      S.waveState="active";
+
+      // Sync food count with actual uncollected items
+      const actualFood = foodItems.filter(f => !f._collected).length;
+      if(actualFood !== S.food) {
+        S.food = actualFood;
+        updateHUD();
+      }
+      // Clean up stale collected food items from array
+      for(let i=foodItems.length-1;i>=0;i--){
+        if(foodItems[i]._collected){foodItems[i].dispose();foodItems.splice(i,1);}
+      }
+
+      const n=Math.min(1+Math.floor(S.wave*.8),8);
+      S.hagsToSpawn=n; S.hagsSpawned=0;
+      const hp=1+Math.floor(S.wave*.25);
+      const hpTxt=hp>1?` (${hp} HP)`:'';
+      showMsg(`Wave ${S.wave} — ${n} Hag${n>1?'s':''}${hpTxt}! 🌑`,2500);
+      for(let i=0;i<n;i++) setTimeout(()=>spawnHag(),i*1000);
+      // Power-up chance
+      if(S.wave>1 && Math.random()<0.5) setTimeout(()=>spawnPowerUp(), 2000+Math.random()*3000);
+    }
+  }
+  if(S.waveState==="active"){
+    if(hags.length===0 && S.hagsSpawned>=S.hagsToSpawn && S.food>0){
+      S.wave++;
+      const bonus=S.food*20; S.score+=bonus; updateHUD();
+      const missing=S.maxFood-S.food;
+      if(missing>0){const rep=Math.min(Math.ceil(missing*.4),3);
+        for(let i=0;i<rep;i++){foodItems.push(createFood((Math.random()-.5)*GS*.4,(Math.random()-.5)*GS*.4));S.food++;}
+        updateHUD();
+      }
+      S.waveState="cooldown"; S.waveCdTimer = Math.max(5, 10 - S.wave * 0.5); // 10s early, min 5s
+      showMsg(`Wave cleared! +${bonus} ⭐`,2500);
+    }
+  }
+}
+
+function applyPowerUp(type) {
+  if(type==="double"){S.hasDouble=true; showMsg("⚡ Double-Barrel!");}
+  else if(type==="pie"){S.hasPie=true; showMsg("⚡ Pie-tapult!");}
+  else if(type==="smoothie"){S.hasSmoothie=true; showMsg("⚡ Smoothie Grenades!");}
+  else if(type==="heal"){S.food=Math.min(S.maxFood,S.food+3); showMsg("❤️ +3 Food!");}
+  else if(type==="shards"){S.shards+=5; showMsg("🧁 +5 Cupcakes!");}
+  updateHUD();
+}
+
+function endGame() {
+  S.active=false; document.getElementById('crosshair').style.display='none';
+  document.getElementById('go-title').textContent="The Hag Devoured Everything...";
+  document.getElementById('go-score').textContent=`Score: ${S.score} · Wave ${S.wave} · ${S.kills} Hags Destroyed`;
+  document.getElementById('game-over').classList.add('show');
+  // Prevent accidental click-through restart
+  const btn = document.getElementById('restartBtn');
+  btn.style.pointerEvents = 'none';
+  setTimeout(() => { btn.style.pointerEvents = 'all'; }, 1500);
+  console.log("GAME OVER at wave", S.wave, "food:", S.food, "hags:", hags.length);
+}
+
+function startGame() {
+  console.log("startGame() called. Stack:", new Error().stack.split('\n')[2]);
+  [hags,foodItems,berries,voxelChunks,shardItems,fences,turrets,powerUps,droppedFoods,woodItems].forEach(arr=>{
+    arr.forEach(x=>{try{x.dispose()}catch(e){}if(x.mesh)try{x.mesh.dispose()}catch(e){}});
+    arr.length=0;
+  });
+  fenceSlotLevel = new Array(FENCE_TOTAL).fill(0);
+  if(S._fencePreview){try{S._fencePreview.dispose()}catch(e){}}
+  resetState(); S.active=true;
+  updateHUD(); updateFenceGuide();
+  player.position=V3(0,0,4); player.scaling=BABYLON.Vector3.One();
+  // Reset NPC states
+  snoodleNPCs.forEach(s => {
+    s._npcState="idle"; s._buildTarget=-1; s._carryingWood=false; s._buildTimer=0;
+    if(s._woodIndicator) s._woodIndicator.setEnabled(false);
+  });
+  // Re-grow all trees
+  trees.forEach(t => {
+    if(!t._alive) {
+      t._alive=true; t._hp=t._maxHp; t._regrowTimer=null;
+      // Trees don't visually regrow but HP resets for replayability
+    }
+  });
+  spawnFood(S.maxFood);
+  document.getElementById('game-over').classList.remove('show');
+  document.getElementById('pause-screen').classList.remove('show');
+  document.getElementById('crosshair').style.display='block';
+}
+
+// ─── INPUT ───
+window.addEventListener('keydown', e => {
+  const k=e.key.toLowerCase();
+  keys[k]=true;
+  if(k===' '){e.preventDefault(); if(S.active) togglePause();}
+  if(k>='1'&&k<='4'){ const idx=parseInt(k)-1; if(WEAPONS[idx].unlocked()) S.curWeapon=idx; updateHUD(); }
+});
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()]=false; });
+
+canvas.addEventListener('mouseenter',()=>{canvas.style.cursor='none';document.getElementById('crosshair').style.display='block';});
+canvas.addEventListener('mouseleave',()=>{document.getElementById('crosshair').style.display='none';});
+
+document.getElementById('startBtn').addEventListener('click',()=>{
+  document.getElementById('title-screen').classList.add('hidden'); startGame();
+});
+document.getElementById('restartBtn').addEventListener('click', startGame);
+
+// ─── INIT ───
+try {
+  createScene();
+  updateHUD();
+  engine.runRenderLoop(()=>{gameLoop();scene.render();});
+  window.addEventListener('resize',()=>engine.resize());
+} catch(e) {
+  console.error("Init failed:", e);
+  document.getElementById('msg').textContent = "Error: " + e.message;
+  document.getElementById('msg').classList.add('show');
+}
+</script>
+</body>
+</html>
